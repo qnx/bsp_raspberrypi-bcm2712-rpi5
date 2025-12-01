@@ -1,0 +1,11 @@
+%C - RP1 MSIX configuration utility
+
+Syntax:
+%C [options]
+
+Options:
+   -i: setup rpi IRQs to use, separated by ','
+   -v: set verbosity level
+
+Example - setup MSIX for ethernet (irq 6), USB 2.0 (irq 31), 3.0 (irq 36):
+   %C -i 6,31,36

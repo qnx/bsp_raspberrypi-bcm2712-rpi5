@@ -1,0 +1,3 @@
+define PINFO
+PINFO DESCRIPTION=DESIGNWARE I2C Driver
+endef

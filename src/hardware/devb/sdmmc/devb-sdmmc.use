@@ -1,0 +1,93 @@
+%C SDMMC Driver.
+
+Syntax:
+devb-sdmmc-<variant> [cam cam_options][sdmmc sdmmc_options...][sdio sdio_options...][blk io-blk_options...] &
+
+Options:  All options are separated by commas.
+
+cam options:
+    async=[priority]  Perform CPU cache invalidation after an I/O operation in
+                   a thread at "priority". In some cases, and on some boards,
+                   this can provide a performance boost.  Default off,
+                   priority 21.
+    bounce=[size]  This option specifies the size of bounce buffer to use.
+                   The bounce buffer acts as an intermediate buffer for doing
+                   transfers to/from the media. Bounce buffers are useful for
+                   devices which cannot access the full range of memory
+                   available to the CPU (32 vs 64-bit architecture etc).  When
+                   used, size should be sufficiently large such that the CAM
+                   library doesn't fragment the I/O requests from io-blk, this
+                   will show markedly better performance. This option will
+                   automatically be enabled when cached memory buffer usage
+                   is disabled or when the hw doesn't support snooping.  The
+                   size argument can include a case-insensitve suffix that
+                   indicates the units: B (bytes; the default), K (kilobytes),
+                   M (megabytes), or P (pages).  The default size=32k.
+    cache=[on|off] Turn on/off usage of cached memory buffers.  Default on.
+    lun=mask       Enable Logical Unit Number (LUN) scan for the devices
+                   specified in mask. The mask is a hex bitmask specifying
+                   which IDs to scan for; the default is 0x00.
+    maxio=wr:rd    Set max I/O write, read blocks.  Default 4096, limited by device.
+    noio           Completely remove the IO ability.  Both ThreadCtl(_NTO_TCTL_IO)
+                   and ThreadCtl(_NTO_TCTL_IO_PRIV) won't be called.
+    nopriv         Don't call ThreadCtl(_NTO_TCTL_IO_PRIV).
+    pnp            Enable CAM plug and play (i.e. don't exit at startup when
+                   no devices are found).  Default off.
+    resmgr=m:l:h:d Enable /dev/camX/XXX interface and set max/lo/hi/devno
+                   thread pool parameters (default: "5:1:2:-1")
+    user=UID:GID   Operate as the specified user and group IDs. The driver
+                   retains the necessary process-manager abilities.
+    smmu=[on|off]  Turn on/off (1/0) the use of IO MMU protection services.
+                   Default off.
+    verbose        Be verbose: display full information about SCSI units
+                   (devices) on startup.
+
+mem options:
+    name=name      Typed memory name to use.  Default sysram&below4G).
+                   See also blk layer option for typed memory.
+
+sdmmc options:
+   The sdmmc options control the driver's interface to the SD/MMC device.
+   If there are multiple SD/MMC devices, you can repeat these options
+   for each controller. Remember, however, to specify the sdmmc keyword
+   before each controller's set of options.
+
+   bkops=[on/auto]   Value 'on' = Manual background operations (WARNING: permanent setting)
+                     Value 'auto' = Device background operations.
+   busno=bus         The bus number of the SDIO controller.
+   bs=[options]      Set board specific options
+   cache=on          Enable eMMC/SD volatile cache
+   partitions=on     Enable eMMC partitions
+   powman=[name]     Connect to powerman.  Dflts: No connect, [name]=devb-sdmmc-<variant>.
+   priority=prio     Set the priority of the processing thread. Dflt 21.
+   pwroff_notify=[short/long] Set power off notification mode for emmc [short/long].
+   relwr=on          Enable eMMc reliable write. Dflt off.
+   verbose=[level]   Set the sdmmc verbosity level.
+
+sdio options:
+   The sdio options control the driver's interface to the SD/MMC host
+   controller.  If there are multiple host controllers, you can repeat
+   these options for each controller. Remember, however, to specify
+   the sdio keyword before each controller's set of options.
+
+   verbose=[level]   Set the sdio verbosity level.
+   hc=name           Name of host controller.
+   vid=vid           The vendor id of the controller.
+   did=did           The device id of the controller.
+   idx=idx           The index of the controller in the machine, where
+                     idx is a value between 0 and the number of adapters.
+   addr=addr         The address of the interface.
+   irq=req           The interrupt used by the controller.
+   dma=chnl          The DMA channel to use.
+   clk=clk           Set the operational clock.
+   ~bmstr            Disable DMA.
+   ~ac12             Disable AC12.  Dflt on.
+   ~ac23             Disable AC23.  Dflt on.
+   bw=[~]bw          Set/Clear bus widths (4, 8).
+   timing=[~]timing  Set/Clear timings (hs, ddr, sdr12, sdr25, sdr50, sdr104, hs200, hs400, hs400es).
+   pm=idle:sleep     Set the pwr mgnt idle/sleep time in ms. Dflt 100:10000 ms.
+   emmc              eMMC device is connected to the interface
+   hs=options        Host specific options.
+   bs=options        Board specific options.
+   nowp              Disable write protect detection.
+   drv_type=drv_type Driver strength value for the HS_TIMING register (0, 1, 2, 3, 4). Dflt 0.

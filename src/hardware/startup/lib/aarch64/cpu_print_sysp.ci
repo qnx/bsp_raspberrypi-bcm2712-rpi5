@@ -1,0 +1,97 @@
+//
+// NOTE: This file is shared between pidin and the startup library.
+// Ordinarily, we'd put it in a library that both code references, but
+// that would complicate building startups in a manner that we don't
+// want. Instead, a copy of this file is placed in both locations
+// and a distinct print_sysp.h file in both directories provide the
+// 'glue' to hook up this code with the particularities of the environment.
+// If you make any changes to this file, you should also copy the new
+// version to the other location (after first checking that no-one's
+// modified the other copy and forgotten to update this location).
+// Normally this won't be a problem since the file will only change in
+// response to system page layout changes and the copy in startup will
+// be modified first and then copied to the pidin tree.
+//
+// This file is in:
+//utils/p/pidin/aarch64_print_sysp.ci & hardware/startup/lib/aarch64/cpu_print_sysp.ci
+
+/*
+ * $QNXLicenseC:
+ * Copyright 2014 QNX Software Systems. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"). You 
+ * may not reproduce, modify or distribute this software except in 
+ * compliance with the License. You may obtain a copy of the License 
+ * at: http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" basis, 
+ * WITHOUT WARRANTIES OF ANY KIND, either express or implied.
+ *
+ * This file may contain contributions from others, either as 
+ * contributors under the License or as licensors under other terms.  
+ * Please review this entire file for other proprietary rights or license 
+ * notices, as well as the QNX Development Suite License Guide at 
+ * http://licensing.qnx.com/license-guide/ for other information.
+ * $
+ */
+
+#if defined(CPU_PRT_SYSPAGE_RTN)
+    CPU_PRT_SYSPAGE_RTN(AARCH64, aarch64, 0, gic_map),
+    CPU_PRT_SYSPAGE_RTN(AARCH64, aarch64, 0, gicr_map),
+    CPU_PRT_SYSPAGE_RTN(AARCH64, aarch64, 0, idreg_dump),
+#else
+
+static void
+aarch64_print_gic_map(void)
+{
+    const struct aarch64_gic_map_entry * const gic_map =
+        _SYSPAGE_CPU_ENTRY(PSP_SYSPAGE, aarch64, gic_map);
+    for (int cpu = 0; cpu < PSP_SYSPAGE->num_cpu; ++cpu) {
+        kprintf("  %d) %L\n", cpu, gic_map->gic_cpu[cpu]);
+    }
+}
+
+static void
+aarch64_print_gicr_map(void)
+{
+    const struct aarch64_gicr_map_entry * const gicr_map =
+        _SYSPAGE_CPU_ENTRY(PSP_SYSPAGE, aarch64, gicr_map);
+    for (int cpu = 0; cpu < PSP_SYSPAGE->num_cpu; ++cpu) {
+        _Uint32t const gicr_idx = gicr_map->gicr_idx[cpu];
+        kprintf("  %d) region:%d idx:%d\n", cpu, (gicr_idx >> 16), gicr_idx & 0xffffu);
+    }
+}
+
+static void
+aarch64_print_idreg_dump(void)
+{
+    const struct aarch64_idreg_dump_entry * const idreg_dump =
+        _SYSPAGE_CPU_ENTRY(PSP_SYSPAGE, aarch64, idreg_dump);
+    const _Uint64t *pdata = &idreg_dump->idreg[0];
+    for (int cpu = 0; cpu < PSP_SYSPAGE->num_cpu; ++cpu) {
+        pdata += 3*8; // Skip AArch32 regs
+        kprintf("  %d) AA64PFR0:%L AA64PFR1:%L\n", cpu, pdata[0], pdata[1]);
+        kprintf("      AA64ZFR0:%L AA64SMFR0:%L\n", pdata[4], pdata[5]);
+        kprintf("      AA64DFR0:%L AA64DFR1:%L\n", pdata[8], pdata[9]);
+        kprintf("      AA64AFR0:%L AA64AFR1:%L\n", pdata[12], pdata[13]);
+        kprintf("      AA64ISAR0:%L AA64ISAR1:%L\n", pdata[16], pdata[17]);
+        kprintf("      AA64ISAR2:%L AA64MMFR0:%L\n", pdata[18], pdata[24]);
+        kprintf("      AA64MMFR1:%L AA64MMFR2:%L\n", pdata[25], pdata[26]);
+        kprintf("      AA64MMFR3:%L AA64MMFR4:%L\n", pdata[27], pdata[28]);
+        kprintf("      AA64PFR2:%L\n", pdata[2]);
+        if (PSP_VERBOSE(3)) {
+            kprintf("      S3_0_C0_C4_3:%L S3_0_C0_C4_6:%L\n", pdata[3], pdata[6]);
+            kprintf("      S3_0_C0_C4_7:%L S3_0_C0_C5_2:%L\n", pdata[7], pdata[10]);
+            kprintf("      S3_0_C0_C5_3:%L S3_0_C0_C5_6:%L\n", pdata[11], pdata[14]);
+            kprintf("      S3_0_C0_C5_7:%L S3_0_C0_C6_3:%L\n", pdata[15], pdata[19]);
+            kprintf("      S3_0_C0_C6_4:%L S3_0_C0_C6_5:%L\n", pdata[20], pdata[21]);
+            kprintf("      S3_0_C0_C6_5:%L S3_0_C0_C6_7:%L\n", pdata[22], pdata[23]);
+            kprintf("      S3_0_C0_C7_5:%L S3_0_C0_C7_6:%L\n", pdata[29], pdata[30]);
+            kprintf("      S3_0_C0_C7_7:%L\n", pdata[31]);
+        }
+        pdata += 4*8;
+    }
+}
+
+#endif

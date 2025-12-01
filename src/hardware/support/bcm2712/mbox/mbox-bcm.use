@@ -1,0 +1,43 @@
+Mailbox utility for BCM2712 SOC
+Syntax:
+%C [commandstring|command_id] [:|=] [parameters]
+
+commandstring:
+    clockrate
+    clockratemeasured
+    clocks
+    clockstate
+    cmdline
+    dmachan
+    firmwarerev
+    firmwarevar
+    firmwarehash
+    gpioconfig
+    gpiostate
+    macaddress
+    maxclockrate
+    maxtemperature
+    maxvoltage
+    memory
+    minclockrate
+    minvoltage
+    model
+    notifyxhcireset
+    powerstate
+    powertiming
+    revision
+    serial
+    temperature
+    throttled
+    turbo
+    vcmemory
+    voltage
+
+note: the input can take either a command string listed above or a command id which is listd in mbox.c.
+      use "=" to indicate a set operation and use ":" to separate the parameters passed to mbox function.
+
+example:
+%C	temperature
+%C	0x30006 [same as above]
+%C	clockrate:10
+%C	clockrate=10:100000000

@@ -1,0 +1,7 @@
+
+Driver-specific options:
+(To be set in the config file by parameter 'bs' under section 'bus')
+
+    cs_max=nume            Defines the Chip select maximum (default 1)
+    sste                   Enables Slave Select Toggle
+    loopback               Enable SPI loopback mode for testing

@@ -1,0 +1,50 @@
+%C - GPIO utility for Raspberry Pi5 RP1
+
+Syntax:
+%C get|set|funcs [gpio number] [set options]
+
+Options:
+get|set|funcs
+- "get" will print the current pin configuration.
+- "set" will set the current pin configuration. Requires [gpio number] and [set options] to be
+specified.
+
+WARNING: The "set" command writes directly to the GPIO control registers, ignoring whatever else may
+be using them (such as device drivers). It is designed as a debug tool, use at your own risk!
+
+- "funcs" will print the possible GPIO alt functions in CSV format.
+
+[gpio number]
+- A comma-separated or hyphen-separated list of pin numbers or ranges (no spaces)
+- ex: 4 or 18-21 or 7,9-11
+- Omitting [gpio number] from "get" or "funcs" commands will print the information for all GPIOs.
+
+[set options]
+- Options for use with the "set" command. Multiple options can be specified as a space-separated list.
+- Possible values are:
+    ip      set GPIO as input
+    op      set GPIO as output
+    a0-a8   set GPIO to alternate function alt0-alt8
+    no      set GPIO to no function (NONE)
+    pu      set GPIO pad to "pull up"
+    pd      set GPIO pad to "pull down"
+    pn      set GPIO pad to "pull none"
+    dh      set GPIO to drive high (1) level (only valid if set to be an output)
+    dl      set GPIO to drive low (0) level (only valid if set to be an output)
+
+Examples:
+
+%C get              Prints state of all GPIOs one per line
+%C get 20           Prints state of GPIO20
+%C get 20,21        Prints state of GPIO20 and GPIO21
+%C get 20-25        Prints state of GPIO20 to GPIO25
+%C set 20 a4        Set GPIO20 to ALT4 function (I2S1_SDI0)
+%C set 20 pu        Enable GPIO20 in-pad pull up
+%C set 20 pd        Enable GPIO20 in-pad pull down
+%C set 20 op        Set GPIO20 to be an output
+%C set 20 dl        Set GPIO20 to output low/zero (must already be set as an output)
+%C set 20 ip pd     Set GPIO20 to input with pull down
+%C set 35 a0 pu     Set GPIO35 to ALT0 function (SPI8_CE1) with pull up
+%C set 20 op pn dh  Set GPIO20 to output with no pull and driving high
+%C funcs            Prints the possible alt functions of all GPIOs
+%C funcs 19         Prints the possible alt functions of GPIO19

@@ -1,0 +1,50 @@
+%C - GPIO utility for Raspberry Pi5 bcm2712 GPIO
+
+Syntax:
+%C get|set|funcs [gpio number] [set options]
+
+Options:
+get|set|funcs
+- "get" will print the current pin configuration.
+- "set" will set the current pin configuration. Requires [gpio number] and [set options] to be
+specified.
+
+WARNING: The "set" command writes directly to the GPIO control registers, ignoring whatever else may
+be using them (such as device drivers). It is designed as a debug tool, use at your own risk!
+
+- "funcs" will print the possible GPIO alt functions in CSV format.
+
+[gpio number]
+- A comma-separated or hyphen-separated list of pin numbers or ranges (no spaces)
+- ex: 4 or 8-10 or 7,9-11
+- Omitting [gpio number] from "get" or "funcs" commands will print the information for all GPIOs.
+
+[set options]
+- Options for use with the "set" command. Multiple options can be specified as a space-separated list.
+- Possible values are:
+    ip      set GPIO as input
+    op      set GPIO as output
+    a1-a8   set GPIO to alternate function alt1-alt8
+    no      set GPIO to no function (NONE)
+    pu      set GPIO pad to "pull up"
+    pd      set GPIO pad to "pull down"
+    pn      set GPIO pad to "pull none"
+    dh      set GPIO to drive high (1) level (only valid if set to be an output)
+    dl      set GPIO to drive low (0) level (only valid if set to be an output)
+
+Examples:
+
+%C get              Prints state of all GPIOs one per line
+%C get 9            Prints state of GPIO9
+%C get 8,9          Prints state of GPIO8 and GPIO9
+%C get 8-10         Prints state of GPIO8 to GPIO10
+%C set 8 a4         Set GPIO8 to ALT4 function
+%C set 8 pu         Enable GPIO8 in-pad pull up
+%C set 8 pd         Enable GPIO8 in-pad pull down
+%C set 8 op         Set GPIO8 to be an output
+%C set 8 dl         Set GPIO8 to output low/zero (must already be set as an output)
+%C set 8 ip pd      Set GPIO8 to input with pull down
+%C set 11 a4 pu     Set GPIO11 to ALT4 function with pull up
+%C set 9 op pn dh   Set GPIO9 to output with no pull and driving high
+%C funcs            Prints the possible alt functions of all GPIOs
+%C funcs 9          Prints the possible alt functions of GPIO9

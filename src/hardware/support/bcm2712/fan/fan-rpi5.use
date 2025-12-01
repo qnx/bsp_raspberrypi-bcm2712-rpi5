@@ -1,0 +1,20 @@
+Raspberry Pi5 cooling fan control driver
+
+Syntax
+%C [options]
+
+Options:
+    -v      Verbose level
+
+Examples:
+    # To read fan speed, range: 0 ~ 255
+    cat /dev/fan
+
+    # To turn off fan, write 0 to /dev/fan
+    echo 0 > /dev/fan
+
+    # To turn on fan or adjust fan speed, write value between 1 ~ 255 to /dev/fan
+    # Please be aware that using value too small, PWM may not have enough
+    # power to drive the fan
+
+    echo 130 > /dev/fan

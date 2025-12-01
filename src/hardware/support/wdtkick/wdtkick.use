@@ -1,0 +1,27 @@
+%C Watchdog Timer Module
+
+Syntax:
+    wdtkick [options] [-B|Woptions] [-B|W[options] -B|W[options] ...]
+
+    Watchdog options can be defined in the command line or stored in hwinfo section of
+    the syspage via startup
+
+Options:
+ -a addr                    WDT physical base address
+ -p priority                Thread priority (default 10)
+ -l len                     Size of the watchdog registers (default 0x1000)
+ -t time                    Set kick time in ms
+ -w write width             The width of the a WDOG write register in bits - default 32
+ -r enable width            The width of the a WDOG enable register in bits - default 32
+ -E OFFSET:MASK[:ENABLE]    Write register at OFFSET to enable the timer
+                                OFFSET - The offset from the base register
+                                MASK   - The mask of the bits in the enable condition
+                                ENABLE - The enable condition, defaults to MASK value
+ -B OFFSET[:VALUE]          Kick timer by the swapping register's bits.
+                                The offset and value to use with the watchdog kicker.
+                                If a value is not specified then 0xFFFFFFFF will be used
+                                Use one of these entries per register that must be written
+ -W OFFSET:VALUE            Kick timer by writing a value to it.
+                                The offset and value to write to the watchdog kicker.
+                                Use one of these entries per register that must be written
+ -v                         Enable verbosity

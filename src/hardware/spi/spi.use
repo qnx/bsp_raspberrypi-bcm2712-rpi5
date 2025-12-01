@@ -1,0 +1,15 @@
+SPI common options
+
+Syntax:
+%C [-c config_file] [-v]
+
+    -c config_file      Path to the SPI configuration file
+                        (default: /etc/system/config/spi/spi.conf)
+    -v                  Increase verbosity. This will override the "verbose" value in the config file.
+
+Note: SPI config file template can be found at "lib/io-spi/config_files/spi-template.conf".
+
+Examples:
+
+# Start the driver using a custom config file path
+%C -c /etc/custom/spi.conf

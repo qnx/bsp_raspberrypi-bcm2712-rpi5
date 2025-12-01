@@ -1,0 +1,28 @@
+<!-- Unless otherwise specified, values/attributes are free-form strings -->
+    <!-- type is currently either BSP or SourceOnly -->
+<sourcePackage type="BSP" id="hw.raspberrypi-bcm2712-rpi5">
+    <title>Raspberry Pi 5</title>
+    <release>0.3.0</release>
+    <license>QDL and Apache II</license>
+    <startup>startup-bcm2712-rpi5</startup>
+    <requires>package: com.qnx.${baselineId}.target.microkernel.core (>= 2.0.2)</requires>
+    <requires>package: com.qnx.${baselineId}.target.usb.hcd.xhci.dwc3</requires>
+    <requires>package: com.qnx.${baselineId}.target.pci.hw.bcm2712</requires>
+    <requires>package: com.qnx.${baselineId}.target.net.devs.cgem (>= 0.0.3)</requires>
+    <requires>package: com.qnx.${baselineId}.target.bsp.spi (>= 0.1.2)</requires>
+    <requires>package: com.qnx.${baselineId}.target.net.openSSH (>= 0.1.0)</requires>
+    <requires>package: com.qnx.${baselineId}.target.driver.cypress_dhd_sdio_rpi5_2_11 (>= 0.0.1.03043)</requires>
+    <requires>package: com.qnx.${baselineId}.target.driver.cypress_dhd_sdio (>= 0.0.4)</requires>
+    <requires>package: com.qnx.${baselineId}.target.net.wpa_supplicant_2.11.iosock (>= 0.0.5)</requires>
+    <requires>package: com.qnx.${baselineId}.target.driver.dhd_utils (>= 0.0.6.03043)</requires>
+    <requires>package: com.qnx.${baselineId}.target.drivers.libfdt (>= 0.1.0)</requires>
+    <description> This board support package (BSP) is for the Raspberry Pi 5 board. This BSP contains prebuilt binaries and buildfiles to boot your board with the QNX RTOS. In addition, this BSP provides source code for various drivers that you can build. For documentation to use this BSP, download the user's guide.</description>
+    <vendor>BlackBerry Limited</vendor>
+    <qnxTargetVersion>SDP8.0</qnxTargetVersion>
+    <qnxTargetCPU variant="aarch64le">AARCH64</qnxTargetCPU>
+    <property key="f.swtype" value="I"/>
+    <!-- type is currently only import, will be extended in the future. -->
+    <bsp type="import">
+        <import id="raspberrypi-bcm2712-rpi5">images/rpi5.build</import>
+    </bsp>
+</sourcePackage>
