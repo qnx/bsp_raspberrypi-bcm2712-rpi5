@@ -1,0 +1,20 @@
+DESIGNWARE I2C Driver
+
+Syntax:
+%C [device options] [generic options]
+
+Example:
+%C -p0x1f00074000 -c200000000 -q0xa8 --u1
+
+Device options:
+-c  i2c_clock       I2C input clock (Default: 200000000)
+-f  hi:low:fall     I2C SCL timing parameters for fast-mode (Default: 4700:4700:100)
+-h  sda_hold_time   I2C SDA hold time in units of i2c_clk period (Default: 0)
+-p  base_address    I2C base address
+-q  irq_number      I2C interrupt number (Default: 0xa8)
+-s  hi:low:fall     I2C SCL timing parameters for standard-mode (Default: 4700:4700:100)
+-v  verbose         I2C verbosity level (Default: 2)
+
+Generic options (must be specified last):
+--b bus_speed       Default bus speed (Default: 100000)
+--u unit            Unit number (Default: 0)
