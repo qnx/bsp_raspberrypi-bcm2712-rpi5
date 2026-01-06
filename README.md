@@ -4,7 +4,9 @@ QNX Board Support Package (BSP) for the Raspberry Pi 5
 
 ## Usage
 
-For more information on this BSP, including how to build it and load it onto your board, see the official BSP User Guide: [QNX SDP 8.0 BSP Documentation - Raspberry Pi 5 BCM2712](https://www.qnx.com/developers/docs/BSP8.0/com.qnx.doc.bsp.nav/topic/vendor.broadcom.html)
+For more information on this BSP, including how to build it and load it onto your board, see the official BSP User Guide:
+* [BSP User Guide](https://www.qnx.com/developers/docs/BSP8.0/com.qnx.doc.bsp_raspberrypi.bcm2712.rpi5_8.0/topic/about.html)
+* [Build the BSP](https://www.qnx.com/developers/docs/BSP8.0/com.qnx.doc.bsp_raspberrypi.bcm2712.rpi5_8.0/topic/common/bsp_build.html)
 
 Note that this Git version of the BSP differs from the QNX Software Center (QSC) version in a couple ways:
 * The Git version contains source code only (no prebuilt binaries).
