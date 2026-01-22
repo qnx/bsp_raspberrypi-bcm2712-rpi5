@@ -84,6 +84,7 @@
 #define MBOX_TAG_POE_HAT_VAL_OLD        (0x00030050U)
 #define MBOX_TAG_NOTIFY_XHCI_RESET      (0x00030058U)
 #define MBOX_TAG_NOTIFY_DISPLAY_DONE    (0x00030066U)
+#define MBOX_TAG_GET_RTC_REG            (0x00030087U)
 #define MBOX_TAG_BUTTONS_PRESSED        (0x00030088U)
 
 #define MBOX_TAG_GET_CMDLINE            (0x00050001U)
@@ -231,7 +232,12 @@ static int mbox_msg(const uint32_t tag, void *buf, const uint32_t bufsize) {
                             // passed in bufsize is not big enough to hold return response
                             len = bufsize;
                         }
-                        (void)memcpy(buf, (void*)msg->buf, len);
+                        uint32_t offset = 0U;
+                        if ((tag & ~0x8000U) == MBOX_TAG_GET_RTC_REG) {
+                            // value returned from RTC communication is offset by the 4-byte register tag
+                            offset = 4U;
+                        }
+                        (void)memcpy(buf, (void*)msg->buf + offset, len);
                     }
                     return (int)len;
                 }
@@ -313,6 +319,7 @@ int main(const int argc, char **argv) {
         { .str="powerstate",        .fmt=&fmt_d,     .tag=MBOX_TAG_GET_POWERSTATE,      .len=2 },
         { .str="powertiming",       .fmt=&fmt_d,     .tag=MBOX_TAG_GET_POWERTIMING,     .len=2 },
         { .str="revision",          .fmt=&fmt_x,     .tag=MBOX_TAG_GET_BOARDREVISION,   .len=2 },
+        { .str="rtc",               .fmt=&fmt_u,     .tag=MBOX_TAG_GET_RTC_REG,         .len=2 },
         { .str="serial",            .fmt=&fmt_x,     .tag=MBOX_TAG_GET_BOARDSERIAL,     .len=2 },
         { .str="temperature",       .fmt=&fmt_d,     .tag=MBOX_TAG_GET_TEMPERATURE,     .len=2 },
         { .str="throttled",         .fmt=&fmt_x,     .tag=MBOX_TAG_GET_THROTTLED,       .len=1 },
@@ -338,7 +345,7 @@ int main(const int argc, char **argv) {
                 *opt++ = '\0';
                 while (num_arg < (sizeof(opt_arg) / sizeof(opt_arg[0]))) {
                     errno = EOK;
-                    val = strtoul(str, &opt, 0);
+                    val = strtoul(opt, &opt, 0);
                     if (errno == EOK) {
                         opt_arg[num_arg++] = (uint32_t)val;
                     }

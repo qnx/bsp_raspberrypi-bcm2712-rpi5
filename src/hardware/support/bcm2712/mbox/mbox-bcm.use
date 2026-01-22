@@ -26,6 +26,7 @@ commandstring:
     powerstate
     powertiming
     revision
+    rtc
     serial
     temperature
     throttled
@@ -41,3 +42,39 @@ example:
 %C	0x30006 [same as above]
 %C	clockrate:10
 %C	clockrate=10:100000000
+
+rtc command can be used to read or set the following RTC registers:
+    0 - RTC clock (in seconds since the start of the epoch)
+    1 - RTC alarm value (in seconds since the start of the epoch)
+    2 - RTC alarm pending flag
+    3 - RTC alarm enabled flag
+    4 - RTC battery charging voltage (in microvolts; 0 by default,
+        3000000 is the charging value for ML2020 Raspberry Pi 5 RTC battery)
+    5 - RTC battery minimum charging voltage (in microvolts;
+        1300000 by default)
+    6 - RTC battery minimum charging voltage (in microvolts;
+        4400000 by default)
+    7 - RTC battery current voltage
+
+The register tag is specified as the first parameter;
+the value to set is the second parameter.
+
+Examples:
+
+# show the current value of the RTC clock
+%C	rtc
+
+# set the system time based on the current value of the RTC clock
+# (assuming the same time zone for both)
+date -s @`\
+%C	rtc`
+
+# set the RTC clock to the system time
+# (assuming the same time zone for both)
+%C	rtc2=0:`date +%s`
+
+# check the current battery voltage
+%C	rtc:7
+
+# set the battery charging voltage to 3 volts
+%C	rtc=4:3000000
