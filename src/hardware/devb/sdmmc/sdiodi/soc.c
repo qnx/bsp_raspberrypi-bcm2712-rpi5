@@ -64,6 +64,7 @@ static int sdio_soc_config( sdio_hc_t *hc, int idx, unsigned offset )
 	hwi_tag			*tag;
 	char			*name;
 	char			*opts;
+	int				status;
 
 	cfg			= &hc->cfg;
 	opts		= NULL;
@@ -77,11 +78,22 @@ static int sdio_soc_config( sdio_hc_t *hc, int idx, unsigned offset )
 			cfg->bus_width = tag->busattr.width;
 		}
 		else if( !strcmp( name, HWI_TAG_NAME_location ) ) {
+			/* Malformed HWI must not index past fixed controller configuration arrays. */
+			if( (unsigned)cfg->base_addrs >= SDIO_MAX_ADDR ) {
+				sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, 1, 1, "%s: too many location tags", __FUNCTION__ );
+				free( opts );
+				return( E2BIG );
+			}
 			cfg->base_addr[cfg->base_addrs]			= tag->location.base;
 			cfg->base_addr_size[cfg->base_addrs]	= tag->location.len;
 			cfg->base_addrs++;
 		}
 		else if( !strcmp( name, HWI_TAG_NAME_irq ) ) {
+			if( (unsigned)cfg->irqs >= SDIO_MAX_IRQ ) {
+				sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, 1, 1, "%s: too many irq tags", __FUNCTION__ );
+				free( opts );
+				return( E2BIG );
+			}
 			cfg->irq[cfg->irqs++] = tag->irq.vector;
 		}
 		else if( !strcmp( name, HWI_TAG_NAME_inputclk ) ) {
@@ -97,6 +109,11 @@ static int sdio_soc_config( sdio_hc_t *hc, int idx, unsigned offset )
 			opts = strdup( __hwi_find_string( tag->optstr.string ) );
 		}
 		else if( !strcmp( name, HWI_TAG_NAME_dma ) ) {
+			if( (unsigned)cfg->dma_chnls >= SDIO_MAX_DMA ) {
+				sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, 1, 1, "%s: too many dma tags", __FUNCTION__ );
+				free( opts );
+				return( E2BIG );
+			}
 			cfg->dma_chnl[cfg->dma_chnls++] = tag->dma.chnl;
 		}
 		else {
@@ -105,8 +122,12 @@ static int sdio_soc_config( sdio_hc_t *hc, int idx, unsigned offset )
 	}
 
 	if( opts ) {
-		sdio_options( hc, opts );
+		status = sdio_options( hc, opts );
 		free( opts );
+		/* A rejected HWI option must not leave a partially configured controller. */
+		if( status != EOK ) {
+			return( status );
+		}
 	}			
 
 	if( cfg->name[0] == '\0' ) {

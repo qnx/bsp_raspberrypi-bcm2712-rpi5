@@ -42,6 +42,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
@@ -55,12 +56,15 @@
 #include <sys/procmgr.h>
 #include <drvr/hwinfo.h>
 #include <stdbool.h>
+#include <limits.h>
 
 #define MAX_NUM_REG        5
 #define DEFAULT_REG_LEN    0x1000
 
 void (*write_wdt)(const uintptr_t, const uint32_t);
+void (*write_enable_wdt)(const uintptr_t, const uint32_t);
 uint32_t (*read_wdt)(const uintptr_t);
+uint32_t (*read_write_wdt)(const uintptr_t);
 
 static void write_wdt_32(const uintptr_t addr, const uint32_t data) {
 #if defined(__X86_64__) || defined(__X86__)
@@ -145,9 +149,11 @@ typedef struct {
     uint32_t enable_condition;
     uint32_t enable_reg_offset;
     uint32_t write_reg[MAX_NUM_REG][2];
+    uint8_t write_operation[MAX_NUM_REG];
     uint32_t bitswap_value;
     uint32_t num_writes;
     bool increment_index;
+    bool enable_condition_set;
 } wdt_init_t;
 
 static bool is_valid_range(const uint32_t val, const int err)
@@ -164,6 +170,31 @@ static bool is_valid_separator(const char separator)
         return true;
     }
     return false;
+}
+
+static bool is_hex_digit_char(const char value)
+{
+    return ((value >= '0') && (value <= '9')) ||
+        ((value >= 'a') && (value <= 'f')) ||
+        ((value >= 'A') && (value <= 'F'));
+}
+
+static bool parse_uint32_option(const char *const text, uint32_t *const result)
+{
+    char *end = NULL;
+    unsigned long value;
+
+    if ((*text < '0') || (*text > '9')) {
+        return false;
+    }
+    errno = EOK;
+    value = strtoul(text, &end, 0);
+    if ((errno == ERANGE) || (end == text) || (*end != '\0') ||
+            (value > UINT32_MAX)) {
+        return false;
+    }
+    *result = (uint32_t)value;
+    return true;
 }
 
 static void parse_hwinfo_init(wdt_init_t *wdi)
@@ -199,6 +230,7 @@ static void parse_hwinfo_opt(wdt_init_t *wdi)
                 wdi->enable_mask = wdi->tag->regname.offset;
             } else if (strcmp("enable_condition",  __hwi_find_string(wdi->tag->regname.regname)) == 0) {
                 wdi->enable_condition = wdi->tag->regname.offset;
+                wdi->enable_condition_set = true;
             } else if (strcmp("enable_offset",  __hwi_find_string(wdi->tag->regname.regname)) == 0) {
                 wdi->enable_reg_offset = wdi->tag->regname.offset;
                 if (wdi->enable_reg_offset > wdi->len) {
@@ -240,7 +272,6 @@ static int parse_hwinfo_value(wdt_init_t *wdi, const char *const reg_name_string
         return EXIT_FAILURE;
     }
 
-    wdi->write_reg[wdi->num_writes][REG_VAL] = wdi->tag->regname.offset;
     wdi->tag = hwi_tag_find(wdi->hwi_off, HWI_TAG_NAME_regname, &(wdi->tag_idx));
     if (wdi->tag != NULL) {
         if (strcmp("offset",  __hwi_find_string(wdi->tag->regname.regname)) == 0) {
@@ -356,7 +387,21 @@ static int wd_parse_hwinfo(wdt_init_t *wdi)
 
 static int wd_parse_options_enable_offset(wdt_init_t *wdi)
 {
-    wdi->enable_reg_offset = (uint32_t)strtol(optarg, &optarg, 16);
+    char *end = NULL;
+    unsigned long mask;
+    unsigned long parsed;
+
+    errno = EOK;
+    parsed = strtoul(optarg, &end, 16);
+    if (!is_hex_digit_char(*optarg) || (errno == ERANGE) ||
+            (end == optarg) ||
+            (parsed > UINT32_MAX)) {
+        slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Enable offset is out of range. Please check "
+            "the command line or Hwinfo default setting.");
+        return EXIT_FAILURE;
+    }
+    wdi->enable_reg_offset = (uint32_t)parsed;
+    optarg = end;
     if (wdi->enable_reg_offset > wdi->len) {
         wdi->len = wdi->enable_reg_offset;
     }
@@ -380,12 +425,16 @@ static int wd_parse_options_enable_offset(wdt_init_t *wdi)
     }
 
     errno = EOK;
-    wdi->enable_mask = (uint32_t)strtoul(optarg + 1, &optarg, 16);
-    if (!is_valid_range(wdi->enable_mask, errno)) {
+    mask = strtoul(optarg + 1, &end, 16);
+    if (!is_hex_digit_char(optarg[1]) || (errno == ERANGE) ||
+            (end == optarg + 1) ||
+            (mask > UINT32_MAX)) {
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Enable mask is out of range. Please check "
             "the command line or Hwinfo default setting.");
         return EXIT_FAILURE;
     }
+    wdi->enable_mask = (uint32_t)mask;
+    optarg = end;
 
     if (optarg[0] == 0) {
         wdi->enable_condition = wdi->enable_mask; //If the enable condition is not present, set it to enable_mask
@@ -394,36 +443,49 @@ static int wd_parse_options_enable_offset(wdt_init_t *wdi)
             "the command line or Hwinfo default setting.");
         return EXIT_FAILURE;
     } else {
+        unsigned long condition;
+
         errno = EOK;
-        wdi->enable_condition = (uint32_t)strtoul(optarg + 1, NULL, 16);
-        if (wdi->enable_condition != 0) {
-            if (!is_valid_range(wdi->enable_condition, errno)) {
-                slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Enable condition is out of range. Please check "
-                    "the command line or Hwinfo default setting.");
-                return EXIT_FAILURE;
-            }
-        } else {
-            wdi->enable_condition = wdi->enable_mask; //If the enable condition is not present, set it to enable_mask
+        condition = strtoul(optarg + 1, &end, 16);
+        /* Zero is a valid active-low condition; require the whole token. */
+        if (!is_hex_digit_char(optarg[1]) || (errno == ERANGE) ||
+                (end == optarg + 1) || (*end != '\0') ||
+                (condition > UINT32_MAX)) {
+            slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Enable condition is out of range. Please check "
+                "the command line or Hwinfo default setting.");
+            return EXIT_FAILURE;
         }
+        wdi->enable_condition = (uint32_t)condition;
     }
+    wdi->enable_condition_set = true;
 
     return EXIT_SUCCESS;
 }
 
 static int wd_parse_options_bitswap(wdt_init_t *wdi)
 {
+    char *end = NULL;
+    bool value_present = false;
+    unsigned long offset;
+    unsigned long value;
+
     if (wdi->num_writes >= MAX_NUM_REG) {
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : %s only supports up to %d kick registers. Please check "
             "the command line or Hwinfo default setting.", wdi->name, MAX_NUM_REG);
         return EXIT_FAILURE;
     }
 
-    wdi->write_reg[wdi->num_writes][REG_OFFSET] = (uint32_t)strtol(optarg, &optarg, 16);
-    if (!is_valid_range(wdi->write_reg[wdi->num_writes][REG_OFFSET], errno)) {
+    errno = EOK;
+    offset = strtoul(optarg, &end, 16);
+    if (!is_hex_digit_char(*optarg) || (errno == ERANGE) ||
+            (end == optarg) ||
+            (offset > UINT32_MAX)) {
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Offset to bitswap is out of range. Please check "
             "the command line or Hwinfo default setting.");
         return EXIT_FAILURE;
     }
+    wdi->write_reg[wdi->num_writes][REG_OFFSET] = (uint32_t)offset;
+    optarg = end;
 
     if (wdi->write_reg[wdi->num_writes][REG_OFFSET] > wdi->len) {
         wdi->len = wdi->write_reg[wdi->num_writes][REG_OFFSET];
@@ -436,18 +498,30 @@ static int wd_parse_options_bitswap(wdt_init_t *wdi)
     }
 
     errno = EOK;
-    wdi->bitswap_value = (uint32_t)strtoul(optarg + 1, NULL, 16);
-    if (wdi->bitswap_value != 0) {
-        if (!is_valid_range(wdi->bitswap_value, errno)) {
+    if (optarg[0] == 0) {
+        wdi->bitswap_value = 0;
+    } else if (optarg[1] == 0) {
+        slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Missing bitswap value for option '-B'.");
+        return EXIT_FAILURE;
+    } else {
+        value = strtoul(optarg + 1, &end, 16);
+        if (!is_hex_digit_char(optarg[1]) || (errno == ERANGE) ||
+                (end == optarg + 1) || (*end != '\0') ||
+                (value > UINT32_MAX)) {
             slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Value to bitswap is out of range. Please check "
                 "the command line or Hwinfo default setting.");
             return EXIT_FAILURE;
         }
+        wdi->bitswap_value = (uint32_t)value;
+        value_present = true;
+    }
+    if (value_present) {
         wdi->write_reg[wdi->num_writes][REG_VAL] = wdi->bitswap_value;
     } else {
         //Default to 0xFFFFFFFF for bitswap if no value entered
         wdi->write_reg[wdi->num_writes][REG_VAL] = 0xFFFFFFFF;
     }
+    wdi->write_operation[wdi->num_writes] = BITSWAP;
     wdi->num_writes++;
     wdi->operation = BITSWAP;
 
@@ -456,6 +530,10 @@ static int wd_parse_options_bitswap(wdt_init_t *wdi)
 
 static int wd_parse_options_write(wdt_init_t *wdi)
 {
+    char *end = NULL;
+    unsigned long offset;
+    unsigned long value;
+
     if (wdi->num_writes >= MAX_NUM_REG) {
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : %s only supports up to %d kick registers. Please check "
             "the command line or Hwinfo default setting.", wdi->name, MAX_NUM_REG);
@@ -463,12 +541,16 @@ static int wd_parse_options_write(wdt_init_t *wdi)
     }
 
     errno = EOK;
-    wdi->write_reg[wdi->num_writes][REG_OFFSET] = (uint32_t)strtoul(optarg, &optarg, 16);
-    if (!is_valid_range(wdi->write_reg[wdi->num_writes][REG_OFFSET], errno)) {
+    offset = strtoul(optarg, &end, 16);
+    if (!is_hex_digit_char(*optarg) || (errno == ERANGE) ||
+            (end == optarg) ||
+            (offset > UINT32_MAX)) {
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Offset to write is out of range. Please check "
             "the command line or Hwinfo default setting.");
         return EXIT_FAILURE;
     }
+    wdi->write_reg[wdi->num_writes][REG_OFFSET] = (uint32_t)offset;
+    optarg = end;
 
     if (wdi->write_reg[wdi->num_writes][REG_OFFSET] > wdi->len) {
         wdi->len = wdi->write_reg[wdi->num_writes][REG_OFFSET];
@@ -481,13 +563,17 @@ static int wd_parse_options_write(wdt_init_t *wdi)
     }
 
     errno = EOK;
-    wdi->write_reg[wdi->num_writes][REG_VAL] = (uint32_t)strtoul(optarg + 1, NULL, 16);
-    if (!is_valid_range(wdi->write_reg[wdi->num_writes][REG_VAL], errno)) {
+    value = strtoul(optarg + 1, &end, 16);
+    if (!is_hex_digit_char(optarg[1]) || (errno == ERANGE) ||
+            (end == optarg + 1) || (*end != '\0') ||
+            (value > UINT32_MAX)) {
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Value to write is out of range. Please check "
             "the command line or Hwinfo default setting.");
         return EXIT_FAILURE;
     }
+    wdi->write_reg[wdi->num_writes][REG_VAL] = (uint32_t)value;
 
+    wdi->write_operation[wdi->num_writes] = WRITE;
     wdi->num_writes++;
     wdi->operation = WRITE;
 
@@ -524,24 +610,27 @@ static int wd_parse_options(const int argc, char * const argv[], wdt_init_t *wdi
             }
             break;
         case 't':
+        {
+            char *end = NULL;
             errno = EOK;
-            val = strtoul(optarg, NULL, 0);
-            if (errno == EOK) {
+            val = strtoul(optarg, &end, 0);
+            if ((*optarg >= '0') && (*optarg <= '9') && (errno == EOK) &&
+                    (end != optarg) && (*end == '\0') &&
+                    (val > 0U) && (val <= UINT_MAX)) {
                 wdi->kick_time = (long)val;
+            } else {
+                return EXIT_FAILURE;
             }
             break;
+        }
         case 'w':
-            errno = EOK;
-            val = strtoul(optarg, NULL, 0);
-            if (errno == EOK) {
-                wdi->write_width = (uint32_t)val;
+            if (!parse_uint32_option(optarg, &wdi->write_width)) {
+                return EXIT_FAILURE;
             }
             break;
         case 'r':
-            errno = EOK;
-            val = strtoul(optarg, NULL, 0);
-            if (errno == EOK) {
-                wdi->enable_width = (uint32_t)val;
+            if (!parse_uint32_option(optarg, &wdi->enable_width)) {
+                return EXIT_FAILURE;
             }
             break;
         case 'E':
@@ -579,7 +668,7 @@ static int wd_evaluate_params(wdt_init_t const * const wdi)
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Invalid  WDOG register physical base address. Please check the command line or Hwinfo default setting.");
         return EXIT_FAILURE;
     }
-    if (wdi->kick_time == -1) {
+    if ((wdi->kick_time <= 0) || ((unsigned long)wdi->kick_time > UINT_MAX)) {
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick error : Invalid default time for watchdog timer kick. Please check the command line or Hwinfo default setting.");
         return EXIT_FAILURE;
     }
@@ -600,12 +689,15 @@ static int wd_setup_write_width(wdt_init_t const * const wdi)
     switch (wdi->write_width) {
     case 32:
         write_wdt = &write_wdt_32;
+        read_write_wdt = &read_wdt_32;
         break;
     case 16:
         write_wdt = &write_wdt_16;
+        read_write_wdt = &read_wdt_16;
         break;
     case 8:
         write_wdt = &write_wdt_8;
+        read_write_wdt = &read_wdt_8;
         break;
     default:
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick: Invalid register write_width (%d) for watchdog timer kick."
@@ -620,18 +712,44 @@ static int wd_setup_enable_width(wdt_init_t const * const wdi)
     switch (wdi->enable_width) {
     case 32:
         read_wdt = &read_wdt_32;
+        write_enable_wdt = &write_wdt_32;
         break;
     case 16:
         read_wdt = &read_wdt_16;
+        write_enable_wdt = &write_wdt_16;
         break;
     case 8:
         read_wdt = &read_wdt_8;
+        write_enable_wdt = &write_wdt_8;
         break;
     default:
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick: Invalid register enable_width (%d) for watchdog timer kick."
                 " Please check the command line or Hwinfo default setting.", wdi->enable_width);
         return EXIT_FAILURE;
     }
+    return EXIT_SUCCESS;
+}
+
+static int wd_validate_mapping(wdt_init_t *wdi)
+{
+    const size_t write_bytes = (size_t)wdi->write_width / 8U;
+    const size_t enable_bytes = (size_t)wdi->enable_width / 8U;
+    size_t required = 0U;
+
+    if (wdi->enable_mask != 0U) {
+        if ((size_t)wdi->enable_reg_offset > (SIZE_MAX - enable_bytes)) return EXIT_FAILURE;
+        required = (size_t)wdi->enable_reg_offset + enable_bytes;
+    }
+    for (uint32_t i = 0U; i < wdi->num_writes; ++i) {
+        size_t end;
+        const size_t access_bytes = (wdi->write_operation[i] == BITSWAP) &&
+            (enable_bytes > write_bytes) ? enable_bytes : write_bytes;
+        if ((size_t)wdi->write_reg[i][REG_OFFSET] > (SIZE_MAX - access_bytes)) return EXIT_FAILURE;
+        end = (size_t)wdi->write_reg[i][REG_OFFSET] + access_bytes;
+        if (end > required) required = end;
+    }
+    /* Include every byte subsequently read or written, not just its offset. */
+    if (required > wdi->len) wdi->len = required;
     return EXIT_SUCCESS;
 }
 
@@ -682,9 +800,11 @@ int main(const int argc, char *argv[])
     wdi.write_width = 32;
     wdi.enable_width = 32;
     wdi.enable_mask = 0;
+    wdi.enable_condition = 0;
     wdi.enable_reg_offset = 0;
     wdi.num_writes = 0;
     wdi.increment_index = true;
+    wdi.enable_condition_set = false;
     wdi.operation = -1;
     wdi.verbose = 0;
     wdi.name = argv[0];
@@ -692,6 +812,15 @@ int main(const int argc, char *argv[])
     ret = wd_parse_hwinfo(&wdi);
     if (ret == EXIT_FAILURE) {
         return ret;
+    }
+
+    /* Hwinfo follows the documented -E default when no condition tag exists. */
+    if ((wdi.enable_mask != 0U) && !wdi.enable_condition_set) {
+        wdi.enable_condition = wdi.enable_mask;
+    }
+
+    for (wdi.idx = 0U; wdi.idx < wdi.num_writes; ++wdi.idx) {
+        wdi.write_operation[wdi.idx] = (uint8_t)wdi.operation;
     }
 
     ret = wd_parse_options(argc, argv, &wdi);
@@ -714,6 +843,11 @@ int main(const int argc, char *argv[])
         return ret;
     }
 
+    ret = wd_validate_mapping(&wdi);
+    if (ret == EXIT_FAILURE) {
+        return ret;
+    }
+
     ret = wd_configure_thread(&wdi);
     if (ret == EXIT_FAILURE) {
         return ret;
@@ -728,17 +862,20 @@ int main(const int argc, char *argv[])
     slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick: enable mask: 0x%x", wdi.enable_mask);
 
     // Configure the enable register
-    if (wdi.enable_mask && ((read_wdt(wdi.base + wdi.enable_reg_offset) & wdi.enable_mask) != wdi.enable_mask)) {
+    if (wdi.enable_mask && ((read_wdt(wdi.base + wdi.enable_reg_offset) & wdi.enable_mask) !=
+            (wdi.enable_condition & wdi.enable_mask))) {
+        const uint32_t current = read_wdt(wdi.base + wdi.enable_reg_offset);
         slogf(_SLOG_SETCODE(_SLOGC_CHAR, 0), _SLOG_INFO,"wdtkick: enabling the watchdog timer");
-        write_wdt(wdi.base + wdi.enable_reg_offset, read_wdt(wdi.base + wdi.enable_reg_offset) | wdi.enable_mask);
+        write_enable_wdt(wdi.base + wdi.enable_reg_offset,
+                (current & ~wdi.enable_mask) | (wdi.enable_condition & wdi.enable_mask));
     }
 
     while (1) {
         for (wdi.idx = 0; wdi.idx < wdi.num_writes; wdi.idx ++) {
-            if (wdi.operation == BITSWAP) {
-                write_wdt(wdi.base + wdi.write_reg[wdi.idx][REG_OFFSET], read_wdt(wdi.base + wdi.write_reg[wdi.idx][REG_OFFSET]) ^ wdi.write_reg[wdi.idx][REG_VAL]);
+            if (wdi.write_operation[wdi.idx] == BITSWAP) {
+                write_wdt(wdi.base + wdi.write_reg[wdi.idx][REG_OFFSET], read_write_wdt(wdi.base + wdi.write_reg[wdi.idx][REG_OFFSET]) ^ wdi.write_reg[wdi.idx][REG_VAL]);
             }
-            if (wdi.operation == WRITE) {
+            if (wdi.write_operation[wdi.idx] == WRITE) {
                 write_wdt(wdi.base + wdi.write_reg[wdi.idx][REG_OFFSET], wdi.write_reg[wdi.idx][REG_VAL]);
             }
         }

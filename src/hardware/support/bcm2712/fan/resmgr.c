@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/iofunc.h>
 #include <sys/resmgr.h>
 #include <sys/dispatch.h>
@@ -90,6 +91,7 @@ static int io_read (resmgr_context_t *ctp, io_read_t *msg, RESMGR_OCB_T *ocb)
     size_t      nbytes;
     int         nparts;
     int         status;
+    int         formatted_len;
     char        buf[PWM_CTRL_MAX_STRLEN] = { 0 };
 
     status = iofunc_read_verify (ctp, msg, ocb, NULL);
@@ -107,10 +109,11 @@ static int io_read (resmgr_context_t *ctp, io_read_t *msg, RESMGR_OCB_T *ocb)
     }
 
 
-    ocb->attr->nbytes = snprintf(buf, sizeof(buf), "%u\n", pwm_fan_get(resmgr.dev));
-    if (ocb->attr->nbytes < 0) {
-        return (EINVAL);
+    formatted_len = snprintf(buf, sizeof(buf), "%u\n", pwm_fan_get(resmgr.dev));
+    if ((formatted_len < 0) || ((size_t)formatted_len >= sizeof(buf))) {
+        return (EOVERFLOW);
     }
+    ocb->attr->nbytes = (off_t)formatted_len;
 
     /*
      *  On all reads (first and subsequent), calculate
@@ -118,11 +121,25 @@ static int io_read (resmgr_context_t *ctp, io_read_t *msg, RESMGR_OCB_T *ocb)
      *  based upon the number of bytes available (nleft)
      *  and the client's buffer size
      */
-    nleft = ocb->attr->nbytes - ocb->offset;
+    /*
+     * The value can shrink between reads (for example, from "255\n" to "0\n").
+     * Validate the signed offset before subtracting so a stale offset cannot
+     * underflow size_t and expose memory beyond the stack buffer.
+     */
+    if (ocb->offset < 0) {
+        return (EINVAL);
+    }
+    if (ocb->offset >= ocb->attr->nbytes) {
+        _IO_SET_READ_NBYTES(ctp, 0);
+        ocb->attr->flags |= IOFUNC_ATTR_ATIME;
+        return (_RESMGR_NPARTS(0));
+    }
+
+    nleft = (size_t)(ocb->attr->nbytes - ocb->offset);
     nbytes = min(_IO_READ_GET_NBYTES(msg), nleft);
     if (nbytes > 0) {
         /* set up the return data IOV */
-        SETIOV (ctp->iov, buf + ocb->offset, nbytes);
+        SETIOV (ctp->iov, buf + (size_t)ocb->offset, nbytes);
 
         /* set up the number of bytes (returned by client's read()) */
         _IO_SET_READ_NBYTES (ctp, nbytes);
@@ -133,7 +150,6 @@ static int io_read (resmgr_context_t *ctp, io_read_t *msg, RESMGR_OCB_T *ocb)
     } else {
         /* they've asked for zero bytes or they've already previously read everything */
         _IO_SET_READ_NBYTES (ctp, 0);
-        ocb->offset = 0;
         nparts = 0;
     }
 
@@ -149,7 +165,9 @@ static int io_write (resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb)
     size_t      nbytes;
     uint32_t    pwm_ctrl;
     char        buf[PWM_CTRL_MAX_STRLEN] = { 0 };
-    uint64_t    val = 0ULL;
+    unsigned long val;
+    char        *endptr;
+    const char  *input_end;
 
     status = iofunc_write_verify(ctp, msg, ocb, NULL);
     if (status != EOK) {
@@ -166,7 +184,11 @@ static int io_write (resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb)
     /* Filter out malicious write requests that attempt to write more
        data than they provide in the message. */
 
-    if (nbytes > ((size_t)ctp->info.srcmsglen - (size_t)ctp->offset - sizeof(io_write_t))) {
+    const size_t srcmsglen = (size_t)ctp->info.srcmsglen;
+    const size_t msg_offset = (size_t)ctp->offset;
+    if ((msg_offset > srcmsglen) ||
+        (sizeof(io_write_t) > (srcmsglen - msg_offset)) ||
+        (nbytes > (srcmsglen - msg_offset - sizeof(io_write_t)))) {
         return EBADMSG;
     }
     if (nbytes == 0U) {
@@ -183,21 +205,33 @@ static int io_write (resmgr_context_t *ctp, io_write_t *msg, RESMGR_OCB_T *ocb)
         (void)slogf(_SLOGC_PWM, _SLOG_ERROR, "%s: resmgr_msgget failed: err=%d", __func__, errno);
         return errno;
     }
-    buf[nbytes] = '\0'; /* just in case the text is not NULL terminated */
-
-    errno = EOK;
-    val = strtoul(buf, NULL, 10);
-    if (errno == EOK) {
-        if (val > PWM_CTRL_MAX_VAL) {
-            (void)slogf(_SLOGC_PWM, _SLOG_ERROR, "%s Invalid value, valid range: range: 0 ~ %u", __func__, PWM_CTRL_MAX_VAL);
-            return (EINVAL);
-        }
-        pwm_ctrl = (uint32_t)val;
+    if ((size_t)nbytes_read != nbytes) {
+        return EBADMSG;
     }
-    else {
-        (void)slogf(_SLOGC_PWM, _SLOG_ERROR, "%s Invalid number string, err=%d", __func__, errno);
+    buf[nbytes] = '\0'; /* just in case the text is not NULL terminated */
+    input_end = &buf[nbytes];
+
+    /* Accept decimal digits followed by at most one newline (for shell echo).
+     * Reject signs, whitespace and trailing text so malformed input cannot be
+     * silently interpreted as zero and stop the fan.
+     */
+    errno = 0;
+    endptr = NULL;
+    if ((buf[0] < '0') || (buf[0] > '9')) {
+        (void)slogf(_SLOGC_PWM, _SLOG_ERROR, "%s Invalid number string", __func__);
         return (EINVAL);
     }
+    val = strtoul(buf, &endptr, 10);
+    if ((errno != 0) || (endptr == buf) ||
+        !((endptr == input_end) ||
+          (((endptr + 1) == input_end) && (*endptr == '\n'))) ||
+        (val > PWM_CTRL_MAX_VAL)) {
+        (void)slogf(_SLOGC_PWM, _SLOG_ERROR,
+                    "%s Invalid value; expected a decimal number in range 0 ~ %u",
+                    __func__, PWM_CTRL_MAX_VAL);
+        return (EINVAL);
+    }
+    pwm_ctrl = (uint32_t)val;
 
     if (verbose > 0) {
         (void)slogf(_SLOGC_PWM, _SLOG_DEBUG1, "%s Write: nbytes: %ld pwm_ctrl=%d", __func__, nbytes, pwm_ctrl);
@@ -271,7 +305,8 @@ int resmgr_init(pwm_fan_dev_t *dev)
     resmgr.io_funcs.read = io_read;
     resmgr.io_funcs.write = io_write;
 
-    iofunc_attr_init(&resmgr.iofunc_attr, S_IFCHR | 0666, NULL, NULL);
+    /* Fan control affects system thermal safety; only root may change or inspect it. */
+    iofunc_attr_init(&resmgr.iofunc_attr, S_IFCHR | 0600, NULL, NULL);
     resmgr.id = resmgr_attach(resmgr.dpp,        /* dispatch handle        */
                        NULL,                     /* resource manager attrs */
                        FAN_DEV_NAME,                 /* device name            */

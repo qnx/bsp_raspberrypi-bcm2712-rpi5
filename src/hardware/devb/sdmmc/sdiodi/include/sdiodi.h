@@ -474,6 +474,7 @@ extern void				*sdio_get_raw_scr( struct sdio_device *device );
 extern int				sdio_sd_switch( struct sdio_device *device, int mode, int grp, uint8_t val, uint8_t *switch_status );
 extern int				sdio_mmc_switch( struct sdio_device *device, uint32_t cmdset, uint32_t mode, uint32_t index, uint32_t value, uint32_t timeout );
 extern int				sdio_send_ext_csd( struct sdio_device *device, uint8_t *csd );
+#define SDIO_RPMB_PROTOCOL_MAX_FRAMES	0xFFFFU	/* RPMB block count is a 16-bit protocol field. */
 extern int				sdio_mmc_rpmb_rw( struct sdio_device *device, void *pf, uint32_t nf, uint32_t flgs );
 extern int				sdio_mmc_gen_man( struct sdio_device *device, uint8_t op, void *buf, uint32_t blklen, uint32_t blkcnt, uint32_t arg, uint32_t flgs);
 extern int				sdio_hc_info( const struct sdio_device *device, sdio_hc_info_t *info );

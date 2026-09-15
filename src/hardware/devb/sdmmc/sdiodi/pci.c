@@ -339,6 +339,12 @@ static int sdio_pci_config( sdio_hc_t *hc, sdio_product_t *prod )
 					break;
 				}
 				else {
+					/* PCI BARs share the same fixed array as HWI/option addresses. */
+					if( (unsigned)cfg->base_addrs >= SDIO_MAX_ADDR ) {
+						sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0,
+								"%s: too many controller base addresses", __FUNCTION__ );
+						return( E2BIG );
+					}
 					cfg->base_addr[cfg->base_addrs] = ba[idx].addr;
 					cfg->base_addr_size[cfg->base_addrs] = ba[idx].size;
 					cfg->base_addrs++;
@@ -346,6 +352,11 @@ static int sdio_pci_config( sdio_hc_t *hc, sdio_product_t *prod )
 				break;
 
 			case pci_asType_e_IO:
+				if( (unsigned)cfg->base_addrs >= SDIO_MAX_ADDR ) {
+					sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0,
+							"%s: too many controller base addresses", __FUNCTION__ );
+					return( E2BIG );
+				}
 				cfg->base_addr[cfg->base_addrs] = ba[idx].addr;
 				cfg->base_addr_size[cfg->base_addrs] = ba[idx].size;
 				cfg->base_addrs++;

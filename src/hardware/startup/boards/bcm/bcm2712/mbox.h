@@ -49,8 +49,7 @@
 #include <stdint.h>
 
 #define MBOX_REG_BASE               (0x107c013880UL)   // rpi4: 0xfe00b880
-#define MBOX_BUFFER_SIZE            (128U)
-#define MBOX_BUFFER_ADDR            (0x7ff80UL)         // 0x100
+#define MBOX_BUFFER_SIZE            (512U)
 #define MBOX_SEND_CHANNEL           (8U)
 
 #define	MBOX_CLK_EMMC   1

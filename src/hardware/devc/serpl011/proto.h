@@ -54,5 +54,5 @@ void *query_default_device(TTYINIT_PL011 *dip, void *link);
 int options(int argc, char *argv[]);
 
 void variant_intr_init(DEV_PL011 *dev);
-void variant_intr_unmask(void);
+void variant_intr_unmask(DEV_PL011 *dev);
 int enable_perms(void);

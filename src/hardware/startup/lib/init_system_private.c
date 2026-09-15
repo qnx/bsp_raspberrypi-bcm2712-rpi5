@@ -99,11 +99,33 @@ load_bootstraps(struct image_header *ifs_hdr,
 		if(prev->args != 0) {
 			// newer style bootstrap_data
 			struct bootargs_entry	*args;
+			unsigned			args_size;
 
-			// Give board specific code a change to modify the
-			// command line arguments for this bootstrap executable
-			args = bootstrap_map(prev->args, 0x2000);
+			/*
+			 * A mapped span is not proof of writable object capacity. Read and
+			 * validate the fixed header, then map only the advertised used bytes;
+			 * ordinary tweak hooks therefore cannot grow this foreign object.
+			 */
+			if(prev->args > (UINTPTR_MAX - (sizeof(*args) - 1U))) {
+				crash("invalid bootstrap argument address");
+			}
+			args = bootstrap_map(prev->args, sizeof(*args));
+			args_size = args->size_lo | (args->size_hi << 8);
+			startup_memory_unmap(args);
+			if((args_size < offsetof(struct bootargs_entry, args)) ||
+					(prev->args > (UINTPTR_MAX - (args_size - 1U)))) {
+				crash("invalid bootstrap argument size");
+			}
+
+			// Give board specific code a chance to modify this bootstrap's arguments.
+			args = bootstrap_map(prev->args, args_size);
+			if(!bootstrap_args_validate(args, args_size)) {
+				crash("invalid bootstrap argument strings");
+			}
 			tweak_cmdline(args, dir->file.path);
+			if(!bootstrap_args_validate(args, args_size)) {
+				crash("invalid adjusted bootstrap arguments");
+			}
 			startup_memory_unmap(args);
 		}
 		// prev will get unmapped next time around or at end

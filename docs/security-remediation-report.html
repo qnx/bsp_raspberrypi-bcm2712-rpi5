@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QNX Raspberry Pi 5 BSP — Security Remediation Report</title>
+  <meta name="description" content="Source-level security findings, remediations, rationale, evidence, and deployment controls for the QNX Raspberry Pi 5 BSP.">
+  <style>
+    :root{color-scheme:light dark;--bg:#f5f7fb;--surface:#fff;--surface2:#eef3f9;--text:#182230;--muted:#5a6878;--line:#d6dee8;--accent:#1769aa;--accent2:#0c7b65;--critical:#b42318;--high:#c84b31;--medium:#a15c00;--ok:#16794d;--partial:#946200;--code:#101923;--code-text:#dce7f3;--shadow:0 10px 30px rgba(18,38,63,.08)}
+    @media(prefers-color-scheme:dark){:root{--bg:#0d131b;--surface:#151e28;--surface2:#1b2734;--text:#edf4fb;--muted:#a8b5c4;--line:#314151;--accent:#69b8f1;--accent2:#66d1ba;--critical:#ff8a80;--high:#ff9b7c;--medium:#ffc66d;--ok:#71d7a7;--partial:#ffd071;--code:#091018;--code-text:#dce7f3;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.62 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--accent);text-underline-offset:3px}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace}code{font-size:.92em}header{background:linear-gradient(135deg,#0f334f,#116e74);color:#fff;padding:3.7rem max(1.25rem,calc((100% - 1160px)/2)) 3rem}header p{max-width:820px;color:#dcecf1;margin:.65rem 0 0}h1{font-size:clamp(2rem,5vw,3.6rem);line-height:1.08;margin:0;letter-spacing:-.035em}h2{font-size:clamp(1.45rem,3vw,2.1rem);line-height:1.2;margin:0 0 .75rem}h3{font-size:1.13rem;line-height:1.3;margin:.1rem 0}h4{font-size:.84rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 .25rem}.eyebrow{font-size:.78rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:#9fe6dc;margin-bottom:.8rem}.meta{display:flex;flex-wrap:wrap;gap:.65rem 1.2rem;margin-top:1.4rem;font-size:.9rem;color:#dcecf1}.meta code{color:#fff}nav{position:sticky;top:0;z-index:3;background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}nav .inner{max-width:1160px;margin:auto;display:flex;gap:1.1rem;padding:.75rem 1.25rem;overflow-x:auto;white-space:nowrap}nav a{text-decoration:none;font-size:.9rem;font-weight:650}main{max-width:1160px;margin:auto;padding:2.2rem 1.25rem 4rem}section{scroll-margin-top:4rem;margin:0 0 3.2rem}.intro{color:var(--muted);max-width:900px}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.9rem;margin:1.4rem 0}.metric{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem;box-shadow:var(--shadow)}.metric strong{display:block;font-size:1.9rem;line-height:1.05}.metric span{color:var(--muted);font-size:.87rem}.callout{border-left:4px solid var(--accent2);background:var(--surface2);padding:1rem 1.15rem;margin:1.25rem 0;border-radius:0 10px 10px 0}.diagram{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem;margin:1.2rem 0;overflow-x:auto}.legend{display:flex;gap:1rem;flex-wrap:wrap;color:var(--muted);font-size:.85rem}.dot{display:inline-block;width:.65rem;height:.65rem;border-radius:50%;margin-right:.3rem}.critical-dot{background:var(--critical)}.high-dot{background:var(--high)}.medium-dot{background:var(--medium)}.finding{background:var(--surface);border:1px solid var(--line);border-radius:15px;margin:1rem 0;box-shadow:var(--shadow);overflow:hidden}.finding summary{cursor:pointer;list-style:none;padding:1rem 1.15rem;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:.75rem}.finding summary::-webkit-details-marker{display:none}.finding summary:after{content:"＋";color:var(--muted);font-size:1.35rem}.finding[open] summary:after{content:"−"}.finding[open] summary{border-bottom:1px solid var(--line)}.id{font:700 .78rem/1 ui-monospace,monospace;padding:.4rem .5rem;background:var(--surface2);border-radius:7px}.title small{display:block;color:var(--muted);font-weight:500;margin-top:.18rem}.badges{display:flex;gap:.4rem;flex-wrap:wrap}.badge{display:inline-block;font-size:.72rem;line-height:1;text-transform:uppercase;letter-spacing:.06em;font-weight:750;padding:.38rem .5rem;border-radius:999px;border:1px solid currentColor}.critical{color:var(--critical)}.high{color:var(--high)}.medium{color:var(--medium)}.conditional{color:var(--accent)}.fixed{color:var(--ok)}.partial{color:var(--partial)}.body{padding:1.15rem}.triad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}.triad>div{min-width:0}.triad p{margin:.2rem 0}.evidence{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.1rem}.codebox{min-width:0}.codehead{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.35rem;font-size:.82rem}.codehead span{color:var(--muted)}pre{margin:0;background:var(--code);color:var(--code-text);border-radius:10px;padding:.9rem;overflow:auto;font-size:.78rem;line-height:1.55;tab-size:4;white-space:pre}.mermaid{background:transparent;color:inherit;border-radius:0;white-space:normal}.refs{font-size:.84rem;color:var(--muted);margin:.8rem 0 0}.refs a{white-space:normal}.matrix{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);font-size:.9rem}.matrix th,.matrix td{text-align:left;vertical-align:top;padding:.7rem;border-bottom:1px solid var(--line)}.matrix th{background:var(--surface2)}.matrix tr:last-child td{border-bottom:0}.deploy{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.deploy article{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:1rem}.deploy p{margin:.4rem 0}.deploy pre{margin-top:.7rem}.note{font-size:.88rem;color:var(--muted)}footer{border-top:1px solid var(--line);padding:1.6rem max(1.25rem,calc((100% - 1160px)/2));color:var(--muted);font-size:.85rem}@media(max-width:850px){.metrics{grid-template-columns:repeat(2,1fr)}.triad,.evidence,.deploy{grid-template-columns:1fr}.finding summary{grid-template-columns:auto 1fr}.finding summary:after{display:none}.badges{grid-column:1/-1}}@media(max-width:480px){header{padding-top:2.5rem}.metrics{grid-template-columns:1fr}.body,.finding summary{padding:.9rem}.matrix{font-size:.82rem}.matrix th,.matrix td{padding:.5rem}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Security hardening change set</div>
+  <h1>QNX Raspberry Pi 5 BSP<br>remediation report</h1>
+  <p>What was vulnerable, what changed, and why each change removes or reduces the risk. Vulnerable excerpts are pinned to the audited base commit; corrected excerpts link to the files in this change set.</p>
+  <div class="meta"><span>Repository: <code>qnx/bsp_raspberrypi-bcm2712-rpi5</code></span><span>Audited base: <code>573dda1a1ca3</code></span><span>Prepared: 2026-09-15</span></div>
+</header>
+<nav aria-label="Report sections"><div class="inner"><a href="#summary">Summary</a><a href="#model">Attack paths</a><a href="#confirmed">Confirmed findings</a><a href="#conditional">Conditional defects</a><a href="#deployment">Deployment controls</a><a href="#validation">Validation</a></div></nav>
+<main>
+<section id="summary">
+  <h2>Outcome</h2>
+  <p class="intro">The patch closes or mitigates the source-level defects identified in the audit and hardens the sample image defaults. Two findings retain deployment dependencies: FDT mappings are now tightly bounded, but the supplied physical pointer still relies on authenticated boot; temporary-storage capacity or quotas remain a product decision. Conditional findings are real code defects whose exploitability requires control of privileged launch, boot, or peripheral inputs.</p>
+  <div class="metrics">
+    <div class="metric"><strong>20</strong><span>finding groups reviewed</span></div>
+    <div class="metric"><strong>1</strong><span>critical default removed</span></div>
+    <div class="metric"><strong>18</strong><span>fixed at source/default level</span></div>
+    <div class="metric"><strong>2</strong><span>require deployment controls</span></div>
+  </div>
+  <div class="callout"><strong>Scope note.</strong> This is a source review and hardening patch, not a product certification. A supported QNX SDP and Raspberry Pi 5 hardware are still required for target compilation, driver exercise, and release qualification.</div>
+  <div class="legend"><span><i class="dot critical-dot"></i>Critical</span><span><i class="dot high-dot"></i>High</span><span><i class="dot medium-dot"></i>Medium</span><span>“Fixed” means the described defect is removed; it does not replace product-specific ACL, boot, update, or network policy.</span></div>
+</section>
+
+<section id="model">
+  <h2>Attack paths and the new gates</h2>
+  <p class="intro">The change set removes direct administration paths and adds bounds, identity, authorization, and liveness checks where untrusted data crosses into privileged code.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  N[Network peer] -->|qconn| A[Root execution]
+  U[Physical UART] -->|raw shell| A
+  L[Local process] -->|fan / raw SDMMC / I2C| P[Privileged resource managers]
+  C[Card or eMMC] -->|lengths / responses| P
+  F[Firmware and DTB] -->|mailbox / properties / args| S[Early startup]
+  A -. removed .-> X[No production listener or shell]
+  P -. gated .-> Y[Write mode and bounds / deployment ACL required]
+  S -. gated .-> Z[Owned buffer + timeout + protocol and size checks]
+  classDef old fill:#7f1d1d,color:#fff,stroke:#ef4444;
+  classDef gate fill:#065f46,color:#fff,stroke:#34d399;
+  class A,P,S old;
+  class X,Y,Z gate;
+  </pre></div>
+  <div class="diagram"><pre class="mermaid">
+flowchart TB
+  I[Untrusted input] --> H{Fixed header fits?}
+  H -- no --> R[Reject]
+  H -- yes --> B{Length/count within remaining bytes?}
+  B -- no --> R
+  B -- yes --> O{Operation authorized and protocol value valid?}
+  O -- no --> R
+  O -- yes --> E[Execute with bounded buffer]
+  E --> V[Validate device/firmware response before copy or use]
+  </pre></div>
+</section>
+
+<section id="confirmed">
+  <h2>Confirmed findings and remediations</h2>
+  <p class="intro">Open a finding to see the issue, remediation, security rationale, and before/after source excerpts. Snippets are intentionally abridged to focus on the security boundary; explanatory comments and ellipses are not literal source, so use each file link for the complete implementation.</p>
+  <details class="finding" open>
+    <summary><span class="id">SEC-01</span><div class="title"><h3>Unauthenticated qconn remote execution</h3><small>Network peer → superuser command execution</small></div><span class="badges"><span class="badge critical">Critical</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The default image included and launched bare <code>qconn</code>. QNX documents that the development service lets a client run applications as superuser and supplies no production authentication boundary.</p></div><div><h4>Remediation</h4><p>Remove <code>qconn</code>, <code>pdebug</code>, and <code>devc-pty</code> from the production IFS and startup path. Keep a commented lab-only recipe using <code>-a -l</code> behind an authenticated tunnel.</p></div><div><h4>Why it works</h4><p>Removing the binary and launch line eliminates the TCP execution endpoint. Local-only lab binding prevents direct network reachability; <code>-a</code> preserves ASLR for debug children.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L797-L829">images/rpi5.build</a></div><pre><code>## REMOTE_DEBUG: gdb or Momentics
+devc-pty
+qconn</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../images/rpi5.build">images/rpi5.build</a></div><pre><code>## qconn is intentionally disabled ...
+# devc-pty
+# qconn -a -l</code></pre></div></div>
+      <p class="refs">CWE-306 · External reference: <a href="https://qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/q/qconn.html">QNX qconn utility documentation</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-02</span><div class="title"><h3>Published account credentials and readable shadow data</h3><small>Network login or local user → reusable account access and potential setuid escalation</small></div><span class="badges"><span class="badge high">High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The build started SSH, shipped setuid <code>su</code>, embedded documented <code>root/root</code> and <code>qnxuser/qnxuser</code> password hashes, and emitted <code>/etc/shadow</code> as mode <code>0644</code>. Where the imported SSH/PAM defaults permit password login, the published user credential followed by the published root credential forms a network-to-root path.</p></div><div><h4>Remediation</h4><p>Lock both password fields with <code>*</code>, change shadow mode to <code>0600</code>, and document unique per-device credential or SSH-key provisioning plus explicit SSH policy review.</p></div><div><h4>Why it works</h4><p>A locked field cannot authenticate with the published password through SSH, PAM, or <code>su</code>, and mode <code>0600</code> prevents ordinary users from harvesting password hashes for offline attack.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><div><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L273-L313">SSH launch</a> · <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L488-L503">accounts</a></div></div><pre><code>/usr/sbin/sshd
+[uid=0 gid=0 perms=4755] /bin/su=su
+## Enabled Username/Password: root/root, qnxuser/qnxuser
+[uid=0 gid=0 perms=0644] /etc/shadow = {
+root:@S@NKlW...published hash...
+qnxuser:@S@HZER...published hash...</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../images/rpi5.build">images/rpi5.build</a></div><pre><code>[uid=0 gid=0 perms=0600] /etc/shadow = {
+root:*:1468494669:0:0
+sshd:*:1231323780:0:0
+qnxuser:*:1468488235:0:0
+}</code></pre></div></div><p class="refs">CWE-798 · The exact imported SSH/PAM reachability was not target-validated; the reusable credentials are removed independently of that configuration. Credential provisioning remains a deployment responsibility.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-03</span><div class="title"><h3>Unauthenticated UID-0 serial shell</h3><small>Physical/debug UART → immediate privileged shell</small></div><span class="badges"><span class="badge high">High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The startup script reopened <code>/dev/ser10</code> and launched <code>ksh</code> without <code>login</code> or any authentication. Optional UART2/UART4 scripts did the same.</p></div><div><h4>Remediation</h4><p>Disable every raw serial shell in the production build. Leave explicit development-only comments so restoration requires an intentional lab-image change.</p></div><div><h4>Why it works</h4><p>The serial driver may still provide diagnostics, but possession of the wire no longer creates a privileged process or bypasses the account policy.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L109-L122">images/rpi5.build</a></div><pre><code>reopen /dev/ser10
+display_msg "Starting shell ..."
+[+session] ksh &amp;</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../images/rpi5.build">images/rpi5.build</a></div><pre><code>## Production images intentionally do not attach a root shell ...
+# reopen /dev/ser10
+# [+session] ksh &amp;</code></pre></div></div><p class="refs">CWE-306 · The same default-off treatment is applied to <code>uart2_console.sh</code> and <code>uart4_console.sh</code>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-04</span><div class="title"><h3>Fan read-offset underflow discloses stack memory</h3><small>Stale offset + shorter value → oversized IOV</small></div><span class="badges"><span class="badge high">High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p><code>io_read()</code> recomputed a short string, then subtracted an unchecked signed file offset into <code>size_t</code>. When the value shrank, the subtraction underflowed and exposed bytes beyond the stack buffer.</p></div><div><h4>Remediation</h4><p>Reject negative offsets, return normal EOF when the offset is at or beyond the produced length, convert only after validation, and cap the IOV to the actual remaining bytes.</p></div><div><h4>Why it works</h4><p>The subtraction now occurs only when <code>0 ≤ offset &lt; length</code>, so <code>nleft</code> cannot wrap and <code>buf + offset</code> remains inside the formatted buffer.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/support/bcm2712/fan/resmgr.c#L107-L130">fan/resmgr.c</a></div><pre><code>ocb-&gt;attr-&gt;nbytes = snprintf(buf, sizeof(buf), "%u\n", ...);
+nleft = ocb-&gt;attr-&gt;nbytes - ocb-&gt;offset;
+nbytes = min(_IO_READ_GET_NBYTES(msg), nleft);
+SETIOV(ctp-&gt;iov, buf + ocb-&gt;offset, nbytes);</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/support/bcm2712/fan/resmgr.c">fan/resmgr.c</a></div><pre><code>if (ocb-&gt;offset &lt; 0) return EINVAL;
+if (ocb-&gt;offset &gt;= ocb-&gt;attr-&gt;nbytes) {
+    _IO_SET_READ_NBYTES(ctp, 0);
+    return _RESMGR_NPARTS(0);
+}
+nleft = (size_t)(ocb-&gt;attr-&gt;nbytes - ocb-&gt;offset);</code></pre></div></div><p class="refs">CWE-191, CWE-125, CWE-200.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-05</span><div class="title"><h3>GEN/MAN SDMMC devctls cross message boundaries</h3><small>Unchecked block length and NEXT cursor</small></div><span class="badges"><span class="badge high">High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>Raw command loops trusted <code>blklen</code> and advanced to chained records without comparing headers or payloads with <code>cam_devctl_size</code>. Lower layers copied exactly that untrusted length.</p></div><div><h4>Remediation</h4><p>Track a byte cursor and remaining length, copy potentially unaligned headers locally, validate every <code>header + payload</code>, and limit a request to 64 chained commands.</p></div><div><h4>Why it works</h4><p>Every buffer passed to the device layer is now wholly contained in the devctl message; NEXT can advance only by a validated record size and cannot walk indefinitely.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sim_sdmmc.c#L2897-L3011">sim_sdmmc.c</a></div><pre><code>buf = (void *)(req + 1);
+sdio_mmc_gen_man(..., buf, req-&gt;blklen, ...);
+if (req-&gt;flags &amp; SDMMC_GENCMD_NEXT)
+    req = (SDMMC_GEN_CMD *)((uintptr_t)buf + req-&gt;blklen);</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/devb/sdmmc/sim_sdmmc.c">sim_sdmmc.c</a></div><pre><code>if (remaining &lt; sizeof(req)) break;
+memcpy(&amp;req, cursor, sizeof(req));
+if (req.blklen &gt; remaining - sizeof(req)) break;
+record_size = sizeof(req) + req.blklen;
+cursor += record_size;
+remaining -= record_size;</code></pre></div></div><p class="refs">CWE-125, CWE-787 · Lower-layer evidence: <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sdiodi/mmc.c#L546-L608">sdiodi/mmc.c</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-06</span><div class="title"><h3>ASSD response length overflows the caller buffer</h3><small>Card-controlled length → heap overwrite and source over-read</small></div><span class="badges"><span class="badge high">High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The request was size-checked, but the two-byte length returned by the card was copied with a 512-byte cap—not the caller’s output capacity or the 510 bytes available after the wire header.</p></div><div><h4>Remediation</h4><p>Validate the fixed devctl header, request capacity, wire length 2–512, response payload 0–510, and destination capacity before copying. Return <code>EMSGSIZE</code> when output is insufficient.</p></div><div><h4>Why it works</h4><p>Both source and destination bounds are derived before <code>memcpy</code>; a malicious card can no longer choose a length that escapes either buffer.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sim_assd.c#L619-L650">sim_assd.c</a></div><pre><code>len = ((data[0] &lt;&lt; 8) + data[1]);
+if (len &gt; ASSD_APDU_STL_SIZE) {
+    len -= ASSD_APDU_STL_SIZE;
+    apdu-&gt;length = min(len, ASSD_APDU_MAX_DLEN);
+    memcpy(apdu_data, data + 2, apdu-&gt;length);
+}</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/devb/sdmmc/sim_assd.c">sim_assd.c</a></div><pre><code>if (wire_len &lt; 2 || wire_len &gt; 512) status = EIO;
+else {
+    response_len = wire_len - 2;
+    if (response_len &gt; capacity) status = EMSGSIZE;
+    else memcpy(apdu_data, data + 2, response_len);
+}</code></pre></div></div><p class="refs">CWE-787, CWE-125.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-07</span><div class="title"><h3>Read-only opens authorize destructive SDMMC operations</h3><small>Observation permission incorrectly implied mutation permission</small></div><span class="badges"><span class="badge high">High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>Erase, lock, write-protect, DSM, RPMB, raw commands, and driver-state changes passed when either <code>_IO_FLAG_RD</code> or <code>_IO_FLAG_WR</code> was present.</p></div><div><h4>Remediation</h4><p>Classify devctls by effect. Require read mode for pure queries, write mode for mutations, and inspect mixed command structures so GET remains readable while SET/CLEAR requires write access.</p></div><div><h4>Why it works</h4><p>A descriptor opened for observation can no longer erase, lock, alter, or issue raw commands. A device ACL/ability policy is still required as the second production layer and is not supplied by this BSP.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sim_sdmmc.c#L3014-L3046">sim_sdmmc.c</a></div><pre><code>/* fail requests without RD or WR */
+if (!(ccb-&gt;cam_devctl_ioflag &amp;
+      (_IO_FLAG_RD | _IO_FLAG_WR))) {
+    ccb-&gt;cam_devctl_status = EACCES;
+}</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/devb/sdmmc/sim_sdmmc.c">sim_sdmmc.c</a></div><pre><code>case DCMD_SDMMC_ERASE:
+case DCMD_RPMB_CMD:
+case DCMD_SDMMC_GEN_CMD:
+    required = _IO_FLAG_WR;
+    break;
+if (required &amp;&amp; !(ioflag &amp; required)) status = EACCES;</code></pre></div></div><p class="refs">CWE-863 · Production must still restrict the raw device node to trusted services.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-08</span><div class="title"><h3>RPMB frame count bypasses message bounds</h3><small>Zero or overflowing counts reach allocation, DMA, and frame access</small></div><span class="badges"><span class="badge high">High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>A zero-frame READ satisfied a header-only size check, then wrote and transmitted a frame beyond the request. Large counts were multiplied repeatedly with inconsistent integer types.</p></div><div><h4>Remediation</h4><p>Require a nonzero count no greater than the 16-bit RPMB protocol maximum, accept only READ/WRITE/RL_WRITE and preserve normal-versus-reliable write semantics, compare count with trailing bytes by division, and use one checked transfer size in both SIM and SDIO layers.</p></div><div><h4>Why it works</h4><p>No frame pointer is derived until at least one complete frame exists. The 65,535-frame cap keeps <code>count × 512</code> representable in the lower layer and consistent across copy, allocation, scatter/gather, and free.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sim_sdmmc.c#L2755-L2876">sim_sdmmc.c</a></div><pre><code>status = sdmmc_rpmb_info(hba, ccb, &amp;info,
+    sizeof(RPMB_CMDHDR) + req-&gt;nframes * 512);
+pf = (rpmb_frame_jedec_t *)(req + 1);
+pf-&gt;block_count = 0;
+sdio_mmc_rpmb_rw(ext-&gt;device, pf, 1, SCF_DIR_OUT);</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/devb/sdmmc/sim_sdmmc.c">sim_sdmmc.c</a></div><pre><code>if (nf == 0 || nf &gt; SDIO_RPMB_PROTOCOL_MAX_FRAMES ||
+    nf &gt; available_frame_bytes / RPMB_FRAME_SIZE ||
+    !recognized_flags) return EINVAL;
+required_size = sizeof(RPMB_CMDHDR) +
+    (size_t)nf * RPMB_FRAME_SIZE;</code></pre></div></div><p class="refs">CWE-125, CWE-787, CWE-190 · Lower-layer fix: <a href="../src/hardware/devb/sdmmc/sdiodi/mmc.c">sdiodi/mmc.c</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-09</span><div class="title"><h3>Mailbox command-line object overlaps the loaded image</h3><small>Fixed address 0x7ff80 + 512 bytes crosses IFS load address 0x80000</small></div><span class="badges"><span class="badge medium">Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The header reserved 128 bytes at <code>0x7ff80</code>, but <code>mbox_get_cmdline()</code> overlaid a 512-byte message. Its last 384 bytes occupied the image loaded at <code>0x80000</code>, causing deterministic early-boot corruption.</p></div><div><h4>Remediation</h4><p>Replace the hard-coded physical address with linker-owned, 16-byte-aligned, 512-byte storage; zero and size-check each message before sending it.</p></div><div><h4>Why it works</h4><p>The linker places the object as part of valid startup storage and its declared capacity matches the largest mailbox message, so initialization and firmware replies cannot cross into an unrelated image address.</p></div></div>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+  A[Old mailbox: 0x7ff80] --> B[Crosses 0x80000]
+  B --> C[384 bytes overlap loaded image]
+  D[New: aligned linker-owned 512-byte array] --> E[Single bounded object]
+  classDef bad fill:#7f1d1d,color:#fff,stroke:#ef4444;
+  classDef good fill:#065f46,color:#fff,stroke:#34d399;
+  class A,B,C bad; class D,E good;
+      </pre></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/startup/boards/bcm/bcm2712/mbox.h#L51-L54">mbox.h</a></div><pre><code>#define MBOX_BUFFER_SIZE (128U)
+#define MBOX_BUFFER_ADDR (0x7ff80UL)
+/* command-line message body makes the object 512 bytes */</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/startup/boards/bcm/bcm2712/mbox.c">mbox.c</a></div><pre><code>static uint8_t mbox_buffer[MBOX_BUFFER_SIZE]
+    __attribute__((aligned(16)));
+#define MBOX_BUFFER_ADDR ((uintptr_t)&amp;mbox_buffer[0])
+
+if (sizeof(*msg) &gt; MBOX_BUFFER_SIZE) crash(...);</code></pre></div></div><p class="refs">CWE-787 · Load-address evidence: <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L7-L12">images/rpi5.build</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-10</span><div class="title"><h3>World-writable thermal control and permissive parsing</h3><small>Any local user could stop cooling; malformed text became zero</small></div><span class="badges"><span class="badge medium">Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p><code>/dev/fan</code> was mode <code>0666</code>. The write path called <code>strtoul()</code> without an end pointer, so text such as <code>abc</code> was accepted as zero and could stop the fan.</p></div><div><h4>Remediation</h4><p>Restrict the node to <code>0600</code>; accept only decimal digits plus an optional final newline; verify the exact message length and range 0–255.</p></div><div><h4>Why it works</h4><p>Only root can control the safety-relevant device and malformed, signed, embedded-NUL, whitespace, or trailing input can no longer be interpreted as a valid duty cycle.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/support/bcm2712/fan/resmgr.c#L146-L215">fan/resmgr.c</a></div><pre><code>val = strtoul(buf, NULL, 10);
+if (errno == EOK) pwm_ctrl = (uint32_t)val;
+...
+iofunc_attr_init(&amp;attr, S_IFCHR | 0666, NULL, NULL);</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/support/bcm2712/fan/resmgr.c">fan/resmgr.c</a></div><pre><code>val = strtoul(buf, &amp;endptr, 10);
+if (errno || endptr == buf || !exact_optional_newline ||
+    val &gt; PWM_CTRL_MAX_VAL) return EINVAL;
+iofunc_attr_init(&amp;attr, S_IFCHR | 0600, NULL, NULL);</code></pre></div></div><p class="refs">CWE-732, CWE-20 · A hardware/thermal-policy failsafe remains recommended above this interface.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-11</span><div class="title"><h3>FDT mapping and property parsing lack validation</h3><small>Malformed DTB → oversized mappings, OOB reads, bad identity/RAM choice, or wrong interrupt</small></div><span class="badges"><span class="badge medium">Medium</span><span class="badge partial">Mitigated</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The generic and boot-option initializers trusted the declared total size too early and still receive a boot-supplied physical pointer. Bootargs were copied without a terminator, <code>linux,revision</code> was read without requiring four bytes, and serial <code>stdout-path</code>/<code>interrupts</code> parsing trusted unbounded strings and arbitrary interrupt tuples.</p></div><div><h4>Remediation</h4><p>Check the header address extent before mapping, validate the header before its total size, share a 16 MiB cap with checked physical extents, cap properties, add NUL termination, parse MAC/revision data exactly, and allow only the expected three-cell level-high debug UART IRQs. Require authenticated boot for pointer provenance.</p></div><div><h4>Why it works</h4><p>An untrusted size cannot create an oversized or wrapped mapping, string consumers receive bounded C strings, fixed-width properties must contain their declared type, and the DTB cannot redirect the console handler to an unrelated interrupt. Arithmetic checks cannot prove that an arbitrary physical pointer denotes trusted RAM, so boot authentication remains required.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><div><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/startup/lib/fdt_init.c#L43-L59">fdt_init.c</a> · <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/startup/boards/bcm/bcm2712/rpi5/init_hwinfo.c#L57-L109">init_hwinfo.c</a></div></div><pre><code>fdt_size = fdt_totalsize(header);
+fdt = startup_memory_map(fdt_size, fdt_paddr, PROT_READ);
+...
+bootargs_str = ws_alloc(len);
+memcpy(bootargs_str, prop-&gt;data, len);
+...
+fdt32_t const *data = (fdt32_t const *)prop-&gt;data;
+return fdt32_to_cpu(data[0]);</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><div><a href="../src/hardware/startup/lib/fdt_init.c">fdt_init.c</a> · <a href="../src/hardware/startup/boards/bcm/bcm2712/rpi5/init_hwinfo.c">init_hwinfo.c</a></div></div><pre><code>if (fdt_paddr &gt; NULL_PADDR - (sizeof(struct fdt_header) - 1U)) return;
+if (declared_size &gt; STARTUP_FDT_MAX_SIZE) return;
+...
+bootargs_str = ws_alloc((size_t)len + 1U);
+memcpy(bootargs_str, prop-&gt;data, (size_t)len);
+bootargs_str[len] = '\0';
+if (prop_len != (int)sizeof(fdt32_t)) return 0;</code></pre></div></div><p class="refs">CWE-125, CWE-20 · Related fixes: <a href="../src/hardware/startup/lib/fdt_tweak_cmdline.c">fdt_tweak_cmdline.c</a> and <a href="../src/hardware/devc/serpl011/aarch64/le.rpi5/fdt_utils.c">serial fdt_utils.c</a>. Vulnerable serial evidence: <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devc/serpl011/aarch64/le.rpi5/fdt_utils.c#L103-L140">base source</a>. Residual pointer trust: <a href="../SECURITY.md">authenticated boot guidance</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-12</span><div class="title"><h3>Mailbox replies and VideoCore RAM size are not trusted safely</h3><small>Infinite waits, stale replies, and subtraction underflow</small></div><span class="badges"><span class="badge medium">Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>Mailbox polling had no bound, a matching channel was accepted without checking address/status/tag/length, and an unchecked VideoCore size was subtracted from 1 GiB to construct the RAM map.</p></div><div><h4>Remediation</h4><p>Add finite polling, memory barriers, exact response address/channel, header status, tag identity/response length/end-tag checks, fail-safe getter results, and fatal validation of nonzero contained VideoCore RAM.</p></div><div><h4>Why it works</h4><p>Faulty firmware can no longer hang startup forever or feed stale/truncated fields into board initialization. Invalid RAM metadata is stopped before arithmetic can wrap into an arbitrary physical range.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/startup/boards/bcm/bcm2712/mbox.c#L168-L203">mbox.c</a></div><pre><code>for (;;) { /* wait for ready */ }
+...
+if ((rdata &amp; 0xf) == MBOX_SEND_CHANNEL)
+    return rdata &amp; ~0xf;
+/* response address and status not checked */</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/startup/boards/bcm/bcm2712/mbox.c">mbox.c</a></div><pre><code>for (poll = 0; poll &lt; MBOX_POLL_LIMIT; ++poll) { ... }
+if (poll == MBOX_POLL_LIMIT) return 0;
+if (returned_addr != request_addr ||
+    header-&gt;code != MBOX_REQ_SUCCESS ||
+    tag-&gt;tag != expected_tag || !response_bit) return 0;</code></pre></div></div><p class="refs">CWE-835, CWE-20, CWE-191 · RAM-map fix: <a href="../src/hardware/startup/boards/bcm/bcm2712/bcm2712_init_raminfo.c">bcm2712_init_raminfo.c</a>; vulnerable base <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/startup/boards/bcm/bcm2712/bcm2712_init_raminfo.c#L71-L106">lines 71–106</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-13</span><div class="title"><h3>I²C resource manager retains an unbounded client-sized buffer</h3><small>Authorized request → persistent process memory pressure</small></div><span class="badges"><span class="badge medium">Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The driver allocated and retained a buffer sized to the largest send/receive request with no driver-level ceiling. One authorized client could permanently inflate the resource manager’s heap.</p></div><div><h4>Remediation</h4><p>Introduce an overrideable 64 KiB limit for each send or receive phase and reject larger requests with <code>EMSGSIZE</code> before allocation.</p></div><div><h4>Why it works</h4><p>Maximum retained memory is finite and chosen before client-controlled lengths reach <code>malloc</code>. Integrators can lower the bound for their controller and latency budget.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/i2c/dwc/sendrecv.c#L105-L155">sendrecv.c</a></div><pre><code>maxbuflen = max(hdr-&gt;send_len, hdr-&gt;recv_len);
+if (maxbuflen &gt; dev-&gt;buflen) {
+    free(dev-&gt;buf);
+    dev-&gt;buf = malloc(maxbuflen);
+    dev-&gt;buflen = maxbuflen;
+}</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/i2c/dwc/sendrecv.c">sendrecv.c</a></div><pre><code>#ifndef DWC_I2C_MAX_TRANSFER_SIZE
+#define DWC_I2C_MAX_TRANSFER_SIZE (64U * 1024U)
+#endif
+if (hdr-&gt;send_len &gt; DWC_I2C_MAX_TRANSFER_SIZE ||
+    hdr-&gt;recv_len &gt; DWC_I2C_MAX_TRANSFER_SIZE)
+    return EMSGSIZE;</code></pre></div></div><p class="refs">CWE-770 · Device ACLs remain necessary because a bounded request can still occupy the bus.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">SEC-14</span><div class="title"><h3>Unbounded RAM-backed temporary storage</h3><small>Local user → system-wide memory exhaustion</small></div><span class="badges"><span class="badge medium">Medium</span><span class="badge partial">Deployment required</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p><code>/tmp</code> and <code>/var/log</code> alias unbounded <code>/dev/shmem</code>. A local process can consume system RAM until unrelated services fail.</p></div><div><h4>Remediation</h4><p><a href="../SECURITY.md">SECURITY.md</a> now requires bounded storage or product-specific quotas plus appropriate owner/group/sticky-bit modes. Set a restrictive creation mask in each service's own launch context or use explicit file modes; a standalone mkifs startup-script <code>umask</code> would not affect later sibling services.</p></div><div><h4>Why it works</h4><p>A hard capacity converts unbounded system-wide memory exhaustion into a contained filesystem-full condition. Per-service creation controls apply to the processes that actually create files. Both require product storage and service choices, so this finding is explicitly deployment-required rather than presented as source-fixed.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L118-L124">images/rpi5.build</a></div><pre><code>[type=link] /tmp=/dev/shmem
+[type=link] /var/log=/tmp
+[type=link] /usr/tmp=/tmp
+# No capacity or quota is defined.</code></pre></div><div class="codebox"><div class="codehead"><span>Documented deployment requirement (abridged)</span><div><a href="../images/rpi5.build">images/rpi5.build</a> · <a href="../SECURITY.md">SECURITY.md</a></div></div><pre><code># SECURITY.md
+replace that arrangement with bounded storage
+or enforce product-specific quotas
+
+Set a restrictive creation mask in each service's
+own launch context or wrapper.</code></pre></div></div><p class="refs">CWE-400 · This cannot be selected safely in a generic BSP because capacity, backing store, and service ownership are product-specific; see <a href="../SECURITY.md">Temporary and persistent storage</a>.</p>
+    </div>
+  </details>
+</section>
+
+<section id="conditional">
+  <h2>Configuration-dependent defects</h2>
+  <p class="intro">These defects are fixed even though the stock image did not expose every trigger. This prevents a future launch configuration, HWI table, multi-port setup, or truncated request from turning them into a privilege-boundary failure.</p>
+  <details class="finding">
+    <summary><span class="id">C-01</span><div class="title"><h3>SDMMC devctls trust truncated headers and weak range limits</h3><small>Short CCB → conditional OOB access; oversized range lists → unbounded synchronous work</small></div><span class="badges"><span class="badge conditional">Conditional Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p><code>CARD_REGISTER</code>, write-protect, erase, and DSM paths inspected request fields before proving the fixed header existed. The card-register write consumed an unproved trailing byte. DSM checked its byte count only after reading <code>nranges</code> and had no documented 128-range work cap. Erase and write-protect narrowed 64-bit counts before validation.</p></div><div><h4>Remediation</h4><p>Validate every fixed header before dereference, compare trailing DSM records by division and cap them at the documented 128-range interoperability limit, require nonzero subtractively bounded partition-relative ranges, reject counts above the 32-bit lower-layer limit before narrowing, and require exactly one EXT_CSD write byte.</p></div><div><h4>Why it works</h4><p>Each field and trailing record is present before use, synchronous work is bounded, and lower layers receive only representable ranges contained by the selected partition. The subtractive geometry checks also preserve safety if nonzero partition offsets are introduced later.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><div><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sim_sdmmc.c#L2175-L2255">range handlers</a> · <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sim_sdmmc.c#L2368-L2454">card register</a> · <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sim_sdmmc.c#L2554-L2637">DSM</a></div></div><pre><code>cr = ccb-&gt;cam_devctl_data;
+len = ccb-&gt;cam_devctl_size - sizeof(SDMMC_CARD_REGISTER);
+dptr = (uint8_t *)(cr + 1);
+...
+sdio_mmc_switch(..., *dptr, ...);
+nlba = (uint32_t)erase-&gt;nlba;
+if (slba + nlba - 1 &gt; pend) return EINVAL;
+/* dsm-&gt;nranges is read before proving the DSM header exists */
+if (size &lt; sizeof(*dsm) + sizeof(*range) * dsm-&gt;nranges) return EINVAL;</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/devb/sdmmc/sim_sdmmc.c">sim_sdmmc.c</a></div><pre><code>if (ccb-&gt;cam_devctl_size &lt; sizeof(*cr)) return CAM_REQ_CMP;
+len = ccb-&gt;cam_devctl_size - sizeof(*cr);
+if (cr-&gt;length &gt; len) return CAM_REQ_CMP;
+if (write &amp;&amp; cr-&gt;length != 1U) status = EINVAL;
+if (dsm-&gt;nranges &gt; 128U || dsm-&gt;nranges &gt; available / sizeof(*range))
+    return EINVAL;
+if (relative_lba &gt;= part-&gt;nlba || nlba &gt; part-&gt;nlba - relative_lba)
+    return EINVAL;</code></pre></div></div><p class="refs">Potential CWE-125, CWE-787, CWE-400 · The base count multiplication is <code>size_t</code>-safe on AArch64; “Conditional” reflects uncertainty about whether external CAM marshalling can deliver a truncated CCB. The 128-range bound follows the <a href="https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.devctl/topic/cam/dcmd_cam_data_set_mgnt.html">QNX devctl compatibility guidance</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">C-02</span><div class="title"><h3>SDIO configuration exceeds fixed arrays</h3><small>Repeated options, HWI tags, or accumulated PCI BARs → object corruption</small></div><span class="badges"><span class="badge conditional">Conditional High</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>Configuration stored repeated values into address[6], IRQ[4], and DMA[4] arrays without checking their counters. Privileged options/HWI tags, or PCI BARs appended after existing addresses, could reach adjacent fields.</p></div><div><h4>Remediation</h4><p>Check each counter against <code>SDIO_MAX_ADDR</code>, <code>SDIO_MAX_IRQ</code>, or <code>SDIO_MAX_DMA</code> before every command-line, HWI, and PCI BAR write; return <code>E2BIG</code> on excess input and propagate rejected HWI option status.</p></div><div><h4>Why it works</h4><p>No index equal to or greater than an array’s capacity reaches an assignment, so accumulated configuration cannot overwrite callbacks or neighboring state.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sdiodi/base.c#L2097-L2129">sdiodi/base.c</a></div><pre><code>cfg-&gt;base_addr[cfg-&gt;base_addrs++] = val64;
+...
+cfg-&gt;irq[cfg-&gt;irqs++] = val;
+...
+cfg-&gt;dma_chnl[cfg-&gt;dma_chnls++] = val;
+/* PCI BAR setup appended through the same unchecked base_addrs index. */</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><div><a href="../src/hardware/devb/sdmmc/sdiodi/base.c">base.c</a> · <a href="../src/hardware/devb/sdmmc/sdiodi/soc.c">soc.c</a> · <a href="../src/hardware/devb/sdmmc/sdiodi/pci.c">pci.c</a></div></div><pre><code>if ((unsigned)cfg-&gt;base_addrs &gt;= SDIO_MAX_ADDR) {
+    status = E2BIG;
+    break;
+}
+/* equivalent checks guard IRQ, DMA, and PCI BAR writes */</code></pre></div></div><p class="refs">CWE-787 · Vulnerable PCI accumulation: <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devb/sdmmc/sdiodi/pci.c#L330-L352">base source</a>; capacities are defined in <a href="../src/hardware/devb/sdmmc/sdiodi/internal.h">internal.h</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">C-03</span><div class="title"><h3>MSI-X IRQ option parser overflows a stack array</h3><small>More than 64 comma-separated entries → stack corruption</small></div><span class="badges"><span class="badge conditional">Conditional Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p><code>msix-rp1 -i</code> wrote each comma-separated number into a 64-entry local array before any count check and accepted partial numeric tokens.</p></div><div><h4>Remediation</h4><p>Check the count before indexing, use an end pointer, require a complete token ending at comma or NUL, enforce IRQ range, and reject empty/trailing entries.</p></div><div><h4>Why it works</h4><p>The 65th entry is rejected before a write, and malformed text can no longer silently produce a numeric IRQ or corrupt parser state.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/support/bcm2712/msix-rp1/main.c#L283-L315">msix-rp1/main.c</a></div><pre><code>uint_t irq_list[RP1_PCIE_MSIX_IRQ_SIZE];
+...
+irq_list[irq_num] = (uint_t)strtoul(str, NULL, 0);
+irq_num++;</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/support/bcm2712/msix-rp1/main.c">msix-rp1/main.c</a></div><pre><code>if (irq_num &gt;= RP1_PCIE_MSIX_IRQ_SIZE) exit(EXIT_FAILURE);
+irq = strtoul(str, &amp;end, 0);
+if (end == str || (*end != '\0' &amp;&amp; *end != ',') ||
+    irq &gt;= RP1_PCIE_MSIX_IRQ_SIZE) exit(EXIT_FAILURE);
+irq_list[irq_num++] = (uint_t)irq;</code></pre></div></div><p class="refs">CWE-121, CWE-787 · Trigger requires control of a privileged utility’s arguments.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">C-04</span><div class="title"><h3>Watchdog mapping, interval, and condition defects</h3><small>Nondefault HWI/options → out-of-map MMIO, busy loop, or failed protection</small></div><span class="badges"><span class="badge conditional">Conditional Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>Mapping length stopped at an offset rather than including access width; zero/narrowed intervals could busy-loop; enable conditions and split values were mishandled; one global mode was applied to mixed bit-swap/write entries.</p></div><div><h4>Remediation</h4><p>Strictly parse the affected interval, width, enable, bit-swap, and write-register values; reject zero intervals; calculate <code>offset + width</code> safely; use separate read/write functions for configured widths; honor masked conditions including zero; preserve split values; and store operation per register.</p></div><div><h4>Why it works</h4><p>Every MMIO byte is mapped before access, delay cannot narrow to zero, enable writes express the intended bit state, and each kick register executes its own validated operation. Base, map-length, and priority options remain privileged configuration inputs.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/support/wdtkick/main.c#L357-L585">wdtkick/main.c</a></div><pre><code>if (offset &gt; wdi-&gt;len) wdi-&gt;len = offset;
+...
+val = strtoul(optarg, NULL, 0); /* zero accepted */
+...
+wdi-&gt;operation = WRITE; /* global last mode */</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/support/wdtkick/main.c">wdtkick/main.c</a></div><pre><code>end = (size_t)offset + access_bytes;
+if (end &gt; required) required = end;
+if (kick_time &lt;= 0 || kick_time &gt; UINT_MAX) return EXIT_FAILURE;
+write_operation[index] = WRITE;
+value = (current &amp; ~mask) | (condition &amp; mask);</code></pre></div></div><p class="refs">CWE-193, CWE-400, CWE-693 · Runtime evidence at audited base <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/support/wdtkick/main.c#L722-L745">lines 722–745</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">C-05</span><div class="title"><h3>RP1 MSI-X state is shared across serial ports</h3><small>Multiple UARTs in one process → unmask through the last port’s state</small></div><span class="badges"><span class="badge conditional">Conditional Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The serial driver supports multiple devices, but RP1 MSI-X base/register variables were global. Each initialization overwrote them and every interrupt handler used the last values.</p></div><div><h4>Remediation</h4><p>Store the unmask mapping and register in each <code>DEV_PL011</code>, pass the device to <code>variant_intr_unmask()</code>, and resolve the FDT IRQ before selecting the register.</p></div><div><h4>Why it works</h4><p>Interrupt acknowledgement is now tied to the port that produced the interrupt; adding another UART cannot redirect an existing handler’s MMIO write.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/devc/serpl011/aarch64/le.rpi5/variant.c#L72-L123">serial variant.c</a></div><pre><code>static uintptr_t rpi_msix_cfg_base;
+static uint32_t rpi_msix_cfg_set_reg;
+...
+void variant_intr_unmask(void) {
+    out32(rpi_msix_cfg_base + rpi_msix_cfg_set_reg, IACK);
+}</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><a href="../src/hardware/devc/serpl011/aarch64/le.rpi5/variant.c">serial variant.c</a></div><pre><code>dev-&gt;intr_unmask_base = mmap_device_memory(...);
+dev-&gt;intr_unmask_reg = selected_register;
+...
+void variant_intr_unmask(DEV_PL011 *dev) {
+    out32(dev-&gt;intr_unmask_base + dev-&gt;intr_unmask_reg, IACK);
+}</code></pre></div></div><p class="refs">CWE-362 / shared-state defect · Structure change: <a href="../src/hardware/devc/serpl011/externs.h">externs.h</a>; call-site change: <a href="../src/hardware/devc/serpl011/intr.c">intr.c</a>.</p>
+    </div>
+  </details>
+
+  <details class="finding">
+    <summary><span class="id">C-06</span><div class="title"><h3>Startup argument insertion has unsafe count and move arithmetic</h3><small>Many/long boot tokens → out-of-object read/write</small></div><span class="badges"><span class="badge conditional">Conditional Medium</span><span class="badge fixed">Fixed</span></span></summary>
+    <div class="body"><div class="triad"><div><h4>Issue</h4><p>The signed 8-bit argument count could wrap; traversal used unbounded <code>strlen</code>; expansion moved data from <code>p - diff</code>; and an 8 KiB mapping was treated as object capacity even though startup boot arguments shared a 3 KiB region with the live stack. Loaded bootstrap blocks had the same false spare-capacity assumption.</p></div><div><h4>Remediation</h4><p>Reserve a dedicated 8 KiB AArch64 startup boot-argument arena before the unchanged stack and derive its capacity from linker symbols. Scope growth permission to that owned object. Map loaded bootstrap arguments header-first and then to exactly their validated used size, making legacy or foreign blocks no-growth. Validate the complete advertised string list, reject invalid sizes/counts, bound every string walk, and move the correct tail.</p></div><div><h4>Why it works</h4><p>Positive growth occurs only when a caller supplies proven writable capacity. Startup insertion cannot reach the separate live stack; foreign blocks cannot grow into adjacent ELF data; and complete-list, count, traversal, and move checks prevent wrap or out-of-object access.</p></div></div>
+      <div class="evidence"><div class="codebox"><div class="codehead"><span>Vulnerable base (abridged)</span><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/src/hardware/startup/lib/bootstrap_cmdline.c#L52-L100">bootstrap_cmdline.c</a></div><pre><code>unsigned num = *countp;
+p += strlen(p) + 1;
+...
+*countp += 1;
+src = p - diff;
+memmove(p, src, ...);</code></pre></div><div class="codebox"><div class="codehead"><span>Corrected (abridged)</span><div><a href="../src/hardware/startup/lib/bootstrap_cmdline.c">bootstrap_cmdline.c</a> · <a href="../src/hardware/startup/lib/aarch64/cstart.S">aarch64/cstart.S</a></div></div><pre><code># owned startup arena ends before stack_addr_lo
+.space STARTUP_BOOTARGS_CAPACITY - (. - boot_args)
+boot_args_end:
+
+# legacy/foreign objects default to advertised used size
+capacity = (bap == capacity_bap) ? capacity_bytes : used_size;
+if (!bootstrap_args_validate(bap, capacity)) return 0;
+len = strnlen(p, (size_t)(end - p));
+if (*countp == INT8_MAX) return 0;
+if (diff &gt; capacity - total_len) return 0;
+memmove(p + add_len, p + sub_len, tail_len);</code></pre></div></div><p class="refs">CWE-125, CWE-787, CWE-190 · Capacity-scoped startup call and stack boundary: <a href="../src/hardware/startup/lib/_main.c">_main.c</a>; header-first foreign mapping: <a href="../src/hardware/startup/lib/init_system_private.c">init_system_private.c</a>; assembler-safe capacity: <a href="../src/hardware/startup/lib/public/startup_abi.h">startup_abi.h</a>.</p>
+    </div>
+  </details>
+</section>
+
+<section id="deployment">
+  <h2>Controls that code alone cannot complete</h2>
+  <p class="intro">The patch documents these release responsibilities in <a href="../SECURITY.md">SECURITY.md</a>. They remain integrator actions because keys, identities, policy types, storage budgets, and build provenance are product-specific.</p>
+  <div class="deploy">
+    <article><h3>Authenticated boot chain</h3><p><strong>Issue:</strong> The repository builds a raw IFS while firmware configuration, DTB, command line, and copied boot files remain deployment artifacts. Startup options can intentionally alter MMIO, memory, and mitigations.</p><p><strong>Remediation:</strong> Bind firmware, configuration, DTB, IFS, and recovery/update state into Raspberry Pi 5 secure boot with an organization key; allowlist production startup arguments.</p><p><strong>Why:</strong> Authentication prevents a modified DTB or command line from exercising privileged boot functionality outside the approved image policy.</p><pre><code>ifs-$(BOARD).bin: $(BOARD).build
+	$(HOST_MKIFS) -v -r$(INSTALL) $(MKIFSFLAGS) $^ $@
+
+# The output is built here; signing is a deployment step.</code></pre><p class="refs"><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/Makefile#L21-L39">images/Makefile</a> · Guidance: <a href="../SECURITY.md">Boot trust</a>.</p></article>
+    <article><h3>Least-privilege service policy</h3><p><strong>Issue:</strong> The sample process-manager configuration does not supply a product security policy with service-specific identities, abilities, or device ACLs.</p><p><strong>Remediation:</strong> Define separate QNX security types and minimum abilities for drivers and services; restrict raw SDMMC, I²C, fan, mailbox, and watchdog paths.</p><p><strong>Why:</strong> Even if a parser regression occurs later, only the intended service can reach the privileged interface, limiting exploit preconditions and blast radius.</p><pre><code>[virtual=aarch64le,raw -compress] boot = {
+    startup-bcm2712-rpi5 -v -u reg -a -W 5000
+    PATH=/proc/boot:... procnto-smp-instr -v
+}
+# No product security-policy types are supplied by this sample.</code></pre><p class="refs"><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L7-L13">images/rpi5.build</a> · Guidance: <a href="../SECURITY.md">Least privilege and device access</a>.</p></article>
+    <article><h3>Persistent SSH host identity</h3><p><strong>Issue:</strong> The sample links <code>/etc/ssh</code> to RAM storage and generates host keys at boot. Clients cannot reliably pin device identity across restarts.</p><p><strong>Remediation:</strong> Provision unique host keys into protected persistent storage and configure SSH to use them; disable password/root login unless explicitly required.</p><p><strong>Why:</strong> Stable per-device keys let clients detect impersonation rather than normalizing host-key changes and warning bypass.</p><pre><code>[type=link] /etc/ssh = /dev/shmem
+...
+ssh-keygen -q -t rsa -N "" -f /etc/ssh/ssh_host_rsa_key
+ssh-keygen -q -t ecdsa -N "" -f /etc/ssh/ssh_host_ecdsa_key</code></pre><p class="refs"><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L279-L306">images/rpi5.build</a> · Guidance: <a href="../SECURITY.md">Identity and remote access</a>.</p></article>
+    <article><h3>Bounded temporary and log storage</h3><p><strong>Issue:</strong> RAM-backed <code>/tmp</code> and <code>/var/log</code> have no repository-defined quota, so an ordinary process can pressure total system memory.</p><p><strong>Remediation:</strong> Replace the aliases with bounded storage or configure quotas and correct owner/group/sticky-bit modes for the product. Apply a creation mask inside each service's own launch context where explicit modes are not used.</p><p><strong>Why:</strong> A hard capacity converts unbounded system-wide exhaustion into a contained filesystem-full condition; service-local creation controls apply to the processes that actually create files.</p><pre><code>[type=link] /tmp=/dev/shmem
+[type=link] /var/log=/tmp
+[type=link] /usr/tmp=/tmp</code></pre><p class="refs"><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/rpi5.build#L118-L124">images/rpi5.build</a> · Guidance: <a href="../SECURITY.md">Temporary and persistent storage</a>.</p></article>
+    <article><h3>Locked dependency provenance and SBOM</h3><p><strong>Issue:</strong> <code>source.xml</code> includes unversioned or minimum-version package requirements and the build imports artifacts from ambient <code>QNX_TARGET</code>.</p><p><strong>Remediation:</strong> Record exact resolved package, firmware, compiler, and tool versions plus hashes; generate an SBOM for each release.</p><p><strong>Why:</strong> Reproducible provenance makes it possible to determine whether a shipped device includes a vulnerable dependency and to rebuild the same release for response.</p><pre><code>&lt;requires&gt;package: com.qnx.${baselineId}.target.usb.hcd.xhci.dwc3&lt;/requires&gt;
+&lt;requires&gt;package: com.qnx.${baselineId}.target.bsp.spi (&gt;= 0.1.2)&lt;/requires&gt;</code></pre><p class="refs"><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/source.xml#L8-L18">source.xml</a> · Guidance: <a href="../SECURITY.md">Supply chain</a>.</p></article>
+    <article><h3>Trusted, isolated build host</h3><p><strong>Issue:</strong> The build can use environment-selected <code>QCONFIG</code>, PATH-resolved tools, and an optional ancestor template. That flexibility assumes the workspace and environment are trusted.</p><p><strong>Remediation:</strong> Build releases in an isolated worker with a sanitized environment, canonical tool paths, reviewed templates, protected signing keys, and captured logs.</p><p><strong>Why:</strong> An untrusted PATH or template can otherwise alter the artifact before signing while leaving source review unchanged.</p><pre><code>include $(QCONFIG)
+HOST_MKIFS := mkifs
+...
+-include $(BUILD_TEMPLATE)/template.mk</code></pre><p class="refs"><a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/Makefile#L7-L12">Makefile</a> · <a href="https://github.com/qnx/bsp_raspberrypi-bcm2712-rpi5/blob/573dda1a1ca387551e5413eeb84db5a4721e5ce3/images/Makefile#L1-L39">images/Makefile</a> · Guidance: <a href="../SECURITY.md">Supply chain</a>.</p></article>
+  </div>
+</section>
+
+<section id="validation">
+  <h2>Validation and residual risk</h2>
+  <table class="matrix">
+    <thead><tr><th>Check</th><th>Result</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>git diff --check</code></td><td><span class="badge fixed">Pass</span></td><td>No whitespace errors in the patch.</td></tr>
+      <tr><td>HTML parse, anchors and local source links</td><td><span class="badge fixed">Pass</span></td><td>The report is structurally valid and every repository-relative evidence link resolves.</td></tr>
+      <tr><td>Startup argument ASan harness and QNX assembly layout</td><td><span class="badge fixed">Pass</span></td><td>The no-capacity API rejects growth, capacity-scoped insertion preserves canaries, and the QNX AArch64 object places <code>boot_args_end</code>/<code>stack_addr_lo</code> at 0x2000 and <code>stack_addr_hi</code> at 0x2c00.</td></tr>
+      <tr><td>Focused QNX AArch64 startup object compilation</td><td><span class="badge fixed">Pass</span></td><td><code>cstart.S</code>, <code>_main.c</code>, <code>bootstrap_cmdline.c</code>, and <code>init_system_private.c</code> compiled with the installed target GCC; this is not a full BSP link or image build.</td></tr>
+      <tr><td>Mailbox/FDT host syntax smoke tests with stubs</td><td><span class="badge fixed">Pass</span></td><td>Changed early-startup code parses under a host compiler with platform APIs stubbed.</td></tr>
+      <tr><td>QNX target build and Raspberry Pi 5 hardware tests</td><td><span class="badge partial">Pending</span></td><td>The make graph resolved from a no-space temporary copy, but the first <code>qcc</code> compile stopped with QNX license error 129; target hardware was unavailable.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><strong>Release gate:</strong> build every modified target with the supported QNX SDP, boot the resulting IFS, fuzz the devctl and parser boundaries, exercise SD/eMMC/ASSD/RPMB/I²C/fan/watchdog/serial paths, and verify the final image—not only this buildfile—contains no qconn listener, raw shell, or reusable credentials.</div>
+</section>
+</main>
+<footer>Security remediation report for audited base <code>573dda1a1ca387551e5413eeb84db5a4721e5ce3</code>. See <a href="../SECURITY.md">SECURITY.md</a> for production guidance and <a href="../README.md">README.md</a> for BSP context.</footer>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({startOnLoad:true,securityLevel:"strict",theme:dark?"dark":"neutral",flowchart:{htmlLabels:false,curve:"basis"}});
+</script>
+</body>
+</html>

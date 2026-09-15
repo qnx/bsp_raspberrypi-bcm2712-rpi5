@@ -486,15 +486,25 @@ int mmc_rpmb_rw( sdio_dev_t * const dev, void * const pf, uint32_t const nf, uin
 	int				op;
 	uint64_t		acmd_caps;
 	int				status;
+	size_t			xfer_size;
 
 	hc		= dev->hc;
+
+	/* Keep allocation, copy, DMA and block-count lengths on the same bounded value. */
+	if( ( pf == NULL ) || ( nf == 0 ) || ( nf > SDIO_RPMB_PROTOCOL_MAX_FRAMES ) ||
+			( nf > ( UINT32_MAX / RPMB_FRAME_SIZE ) ) ||
+			( ( flgs != SCF_DIR_IN ) && ( flgs != SCF_DIR_OUT ) &&
+			  ( flgs != ( SCF_DIR_OUT | SCF_SBC_RLW ) ) ) ) {
+		return( EINVAL );
+	}
+	xfer_size = nf * RPMB_FRAME_SIZE;
 
 	cmd = sdio_alloc_cmd( );
 	if( cmd == NULL ) {
 		return( ENOMEM );
 	}
 
-	buf = sdio_alloc( RPMB_FRAME_SIZE * nf );
+	buf = sdio_alloc( xfer_size );
 	if( buf == NULL ) {
 		sdio_free_cmd( cmd );
 		return( ENOMEM );
@@ -510,7 +520,7 @@ int mmc_rpmb_rw( sdio_dev_t * const dev, void * const pf, uint32_t const nf, uin
 		}
 		op = MMC_WRITE_MULTIPLE_BLOCK;
 		flags = SCF_CTYPE_ADTC | SCF_DIR_OUT | SCF_RSP_BUSY | SCF_RSP_R1;
-		memcpy( buf, pf, nf * RPMB_FRAME_SIZE );
+		memcpy( buf, pf, xfer_size );
 	}
 
 	status = _sdio_set_block_count( dev, nf, sbcflg );
@@ -520,7 +530,7 @@ int mmc_rpmb_rw( sdio_dev_t * const dev, void * const pf, uint32_t const nf, uin
 		acmd_caps = hc->caps & ( HC_CAP_ACMD23 | HC_CAP_ACMD12 );
 		hc->caps &= ~( HC_CAP_ACMD23 | HC_CAP_ACMD12 );
 
-		sge.sg_count   = RPMB_FRAME_SIZE * nf;
+		sge.sg_count   = (uint32_t)xfer_size;
 		sge.sg_address = (paddr_t)buf;
 		sdio_setup_cmd( cmd, flags, op, 0 );
 		sdio_setup_cmd_io( cmd, flags, nf, RPMB_FRAME_SIZE, &sge, 1, NULL );
@@ -530,14 +540,14 @@ int mmc_rpmb_rw( sdio_dev_t * const dev, void * const pf, uint32_t const nf, uin
 		hc->caps |= acmd_caps;
 
 		if( ( status == EOK ) && ( flgs == SCF_DIR_IN ) ) {
-			memcpy( pf, buf, nf * RPMB_FRAME_SIZE );
+			memcpy( pf, buf, xfer_size );
 		}
 	}
 	else {
 		sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0, "%s: set_block_count failed", __func__ );
 	}
 
-	sdio_free( buf, nf * RPMB_FRAME_SIZE );
+	sdio_free( buf, xfer_size );
 	sdio_free_cmd( cmd );
 
 	return( status );

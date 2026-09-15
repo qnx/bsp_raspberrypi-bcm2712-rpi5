@@ -59,6 +59,17 @@ struct fdt_info
     uint64_t size;
 };
 
+#define BCM2712_DEBUG_UART_IRQ_REV10 153U
+#define BCM2712_DEBUG_UART_IRQ_REV11 152U
+#define GIC_FDT_SPI_TYPE             0U
+#define GIC_FDT_LEVEL_HIGH           4U
+
+static int32_t valid_debug_uart_irq(const uint32_t irq)
+{
+    return (irq == BCM2712_DEBUG_UART_IRQ_REV10) ||
+        (irq == BCM2712_DEBUG_UART_IRQ_REV11);
+}
+
 static int32_t map_fdt(struct asinfo_entry const * const as, char const * const name, void * const arg)
 {
     int32_t ret = 0;
@@ -105,8 +116,10 @@ int32_t fdt_debug_console_irq_fix(DEV_PL011 *dev)
                 ret = -3;
             }
             else {
-                const char *stdout_path_str = fdt_getprop(fdt.base, chosen_offset, "stdout-path", NULL);
-                if (stdout_path_str == NULL) {
+                int32_t stdout_path_len = 0;
+                const char *stdout_path_str = fdt_getprop(fdt.base, chosen_offset, "stdout-path", &stdout_path_len);
+                if ((stdout_path_str == NULL) || (stdout_path_len <= 0) ||
+                        (memchr(stdout_path_str, '\0', (size_t)stdout_path_len) == NULL)) {
                     ret = -4;
                 }
                 else {
@@ -115,8 +128,9 @@ int32_t fdt_debug_console_irq_fix(DEV_PL011 *dev)
                     int32_t prop_len = 0;
                     uint32_t irq = 0;
                     /* find default console serial from "stdout-path = "serial10:115200n8" */
-                    const char *p = strchr(stdout_path_str, ':');
-                    namelen = (p != NULL) ? (int32_t)(p - stdout_path_str) : (int32_t)strlen(stdout_path_str);
+                    const size_t path_len = strnlen(stdout_path_str, (size_t)stdout_path_len);
+                    const char *p = memchr(stdout_path_str, ':', path_len);
+                    namelen = (p != NULL) ? (int32_t)(p - stdout_path_str) : (int32_t)path_len;
                     node_offset = fdt_path_offset_namelen(fdt.base, stdout_path_str, namelen);
                     if (node_offset < 0) {
                         ret = -5;
@@ -131,10 +145,21 @@ int32_t fdt_debug_console_irq_fix(DEV_PL011 *dev)
                                 ret = -7;
                             }
                             else {
-                                // Extract the second cell of interrupts.
+                                // Require a GIC SPI tuple and prevent the +32 translation from wrapping.
                                 const fdt32_t * const data = (fdt32_t const *)fdt_prop->data;
-                                irq = fdt32_to_cpu(data[1]) + 32U;  /* FDT does not include interrupt 0~31 */
-                                if (dev->intr != irq) {
+                                const uint32_t irq_type = fdt32_to_cpu(data[0]);
+                                const uint32_t irq_index = fdt32_to_cpu(data[1]);
+                                const uint32_t irq_flags = fdt32_to_cpu(data[2]);
+                                if ((irq_type != GIC_FDT_SPI_TYPE) ||
+                                        (irq_index > (1019U - 32U)) ||
+                                        (irq_flags != GIC_FDT_LEVEL_HIGH) ||
+                                        !valid_debug_uart_irq(irq_index + 32U)) {
+                                    ret = -8;
+                                }
+                                else {
+                                    irq = irq_index + 32U;  /* FDT does not include interrupt 0~31 */
+                                }
+                                if ((ret == EOK) && (dev->intr != irq)) {
                                     (void)slogf (_SLOG_SETCODE (_SLOGC_CHAR, 0), _SLOG_NOTICE, "Override Serial console IRQ from %u to %u", dev->intr, irq);
                                     dev->intr = irq;
                                 }

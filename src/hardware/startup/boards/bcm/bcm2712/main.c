@@ -43,6 +43,7 @@
  */
 
 #include <startup.h>
+#include <errno.h>
 #include <arm/pl011.h>
 #include <hw/hwinfo_private.h>
 #include <drvr/hwinfo.h>
@@ -96,13 +97,13 @@ void cpu_tweak_cmdline(struct bootargs_entry *bap, const char * const name) {
             return;
         }
 
-        // skip vpu-inserted arguments up to dash or double-space
-        do {
-            next_arg = find_next_arg(str, &str, 0);
-            if (next_arg[0] == '\0') break;
-            if (next_arg[0] == '-') break;
-            if ((next_arg[0] == ' ') && (next_arg[1] == ' ')) break;
-        } while (1);
+		// Skip firmware arguments until the first startup option.
+		do {
+			/* Forward one terminated token, never the unbounded remaining string. */
+			next_arg = find_next_arg(str, &str, 1);
+			if (next_arg[0] == '\0') break;
+			if (next_arg[0] == '-') break;
+		} while (1);
 
         for (;;) {
             if (next_arg[0] == '\0') break;
@@ -150,11 +151,18 @@ int main(const int argc, char ** const argv)
             case 'W':
                 options |= WDT_ENABLE;
                 if (optarg) {
-                    uint32_t timeout = (uint32_t) strtoul(optarg, &optarg, 0);
-                    if (timeout != 0U) {
-                        wdt_timeout = timeout;
-                    }
+                    char *end = NULL;
+                    unsigned long timeout;
 
+                    errno = EOK;
+                    timeout = strtoul(optarg, &end, 0);
+                    /* Do not let malformed or oversized text wrap to a short timeout. */
+                    if ((*optarg < '0') || (*optarg > '9') || (errno != EOK) ||
+                            (end == optarg) || (*end != '\0') ||
+                            (timeout == 0UL) || (timeout > UINT32_MAX)) {
+                        crash("Invalid watchdog timeout: %s\n", optarg);
+                    }
+                    wdt_timeout = (uint32_t)timeout;
                 }
                 break;
             default:

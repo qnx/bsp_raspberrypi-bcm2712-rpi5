@@ -68,22 +68,34 @@
  * |----------------| <-0x000000000
  */
 void bcm2712_init_raminfo(void) {
-    const uint32_t vcram_size = mbox_get_vc_memory();
-    const paddr_t vcram_start = (paddr_t)(GIG(1UL) - vcram_size);
     const uint32_t rev = get_board_revision();
     uint64_t ramsize = 0UL;
-
-    /* Avoid touching the stub in startup */
-    avoid_ram(BCM2712_DRAM_BASE, BCM2712_DRAM_STUB_SIZE);
-    /* Avoid touching the VideoCore memory in startup */
-    avoid_ram(vcram_start, vcram_size);
+    uint32_t vcram_size;
+    paddr_t vcram_start;
 
     ramsize = MEG(get_memory_size(rev));
     if (ramsize == 0UL) {
         ramsize = MEG(256UL);
         kprintf("Warning: Failed to detect RAM size. Defaulting to %u MB.\n",
-            ramsize);
+            (unsigned)(ramsize / MEG(1UL)));
     }
+
+    vcram_size = mbox_get_vc_memory();
+    /*
+     * Treat malformed firmware memory metadata as fatal.  Continuing with a
+     * zero or oversized value would wrap the subtraction below and advertise
+     * arbitrary physical addresses as RAM.
+     */
+    if ((vcram_size == 0U) ||
+        ((paddr_t)vcram_size > (GIG(1UL) - BCM2712_DRAM_STUB_SIZE))) {
+        crash("Invalid VideoCore RAM size: %u\n", vcram_size);
+    }
+    vcram_start = (paddr_t)(GIG(1UL) - (paddr_t)vcram_size);
+
+    /* Avoid touching the stub in startup */
+    avoid_ram(BCM2712_DRAM_BASE, BCM2712_DRAM_STUB_SIZE);
+    /* Avoid touching the VideoCore memory in startup */
+    avoid_ram(vcram_start, vcram_size);
 
     if (ramsize >= GIG(4UL)) {
         add_ram(BCM2712_DRAM_BASE, GIG(4UL) - MEG(64UL)); // periphs are mapped to 0xfc000000

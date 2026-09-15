@@ -44,6 +44,9 @@
 
 #include <sim_sdmmc.h>
 
+#define SDMMC_MAX_CHAINED_COMMANDS	64U
+#define SDMMC_MAX_DSM_RANGES		128U	/* QNX devctl compatibility and work bound. */
+
 SDMMC_CTRL sdmmc_ctrl;
 
 static const MODULE_ENTRY sim_module = {
@@ -2178,15 +2181,15 @@ int sdmmc_wp_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	uint32_t			op;
 	uint32_t			nlba;
 	uint64_t			slba;
-	uint64_t			pend;
 	int					status;
 
 	ext			= (SIM_SDMMC_EXT *)hba->ext;
+	if( ccb->cam_devctl_size < sizeof( SDMMC_WRITE_PROTECT ) ) {
+		ccb->cam_devctl_status = EINVAL;
+		return( CAM_REQ_CMP );
+	}
 	wp			= ccb->cam_devctl_data;
 	part		= &ext->targets[ccb->cam_ch.cam_target_id].partitions[ccb->cam_ch.cam_target_lun];
-	nlba		= max( 1, wp->nlba );
-	slba		= part->slba + wp->lba;
-	pend		= part->slba + part->nlba - 1;
 	wp->mode	&= SDMMC_WP_MODE_PWR_WP_EN;	// limit mode to nothing permanent
 	status		= EOK;
 
@@ -2208,16 +2211,21 @@ int sdmmc_wp_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 			break;
 	}
 
-	if( sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb ) != CAM_REQ_CMP ) {
-		status = EIO;
-	}
-	else if( !op || ( slba > pend ) || ( ( slba + nlba - 1 ) > pend ) ) {
+	/* Validate relative geometry before narrowing or adding partition offsets. */
+	if( !op || ( wp->nlba == 0U ) || ( wp->nlba > UINT32_MAX ) ||
+			( wp->lba >= part->nlba ) || ( wp->nlba > ( part->nlba - wp->lba ) ) ||
+			( part->slba > ( UINT64_MAX - wp->lba ) ) ) {
 		status = EINVAL;
+	}
+	else if( sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb ) != CAM_REQ_CMP ) {
+		status = EIO;
 	}
 	else if( ext->instance.ident.dtype != DEV_TYPE_MMC ) {
 		status	= ENOTSUP;
 	}
 	else {
+		nlba = (uint32_t)wp->nlba;
+		slba = part->slba + wp->lba;
 		status = sdmmc_write_protect( hba, op, part->config, wp->mode, slba, nlba, &wp->prot );
 	}
 
@@ -2234,25 +2242,31 @@ int sdmmc_erase_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	uint32_t			nlba;
 	uint64_t			egs;
 	uint64_t			slba;
-	uint64_t			pend;
 	int					status;
 
 	ext				= (SIM_SDMMC_EXT *)hba->ext;
+	if( ccb->cam_devctl_size < sizeof( SDMMC_ERASE ) ) {
+		ccb->cam_devctl_status = EINVAL;
+		return( CAM_REQ_CMP );
+	}
 	erase			= ccb->cam_devctl_data;
 	part			= &ext->targets[ccb->cam_ch.cam_target_id].partitions[ccb->cam_ch.cam_target_lun];
 	egs				= ext->dev_inf.erase_size / 512;
-	nlba			= (uint32_t)erase->nlba;
-	slba			= part->slba + erase->lba;
-	pend			= part->slba + part->nlba - 1;
 	status			= EINVAL;
 
-	if( sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb ) != CAM_REQ_CMP ) {
+	/* Keep destructive ranges within the selected partition before narrowing. */
+	if( ( egs == 0U ) || ( erase->nlba == 0U ) || ( erase->nlba > UINT32_MAX ) ||
+			( erase->lba >= part->nlba ) ||
+			( erase->nlba > ( part->nlba - erase->lba ) ) ||
+			( part->slba > ( UINT64_MAX - erase->lba ) ) ) {
+		status = EINVAL;
+	}
+	else if( sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb ) != CAM_REQ_CMP ) {
 		status = EIO;
 	}
-	else if( ( slba > pend ) || ( ( slba + nlba - 1 ) > pend ) ) {
-		status = EINVAL;			// verify request is within partition
-	}
 	else {
+		nlba = (uint32_t)erase->nlba;
+		slba = part->slba + erase->lba;
 		switch( erase->action ) {
 			case SDMMC_ERASE_ACTION_NORMAL:
 					// verify for erase group alignment
@@ -2369,14 +2383,25 @@ int sdmmc_card_register_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 {
 	SIM_SDMMC_EXT			*ext;
 	SDMMC_CARD_REGISTER		*cr;
-	int						len;
+	size_t					len;
 	uint8_t					*dptr;
 	uint8_t					data[512];
 	uint32_t				data_sds[16] = {0};
 
 	ext		= (SIM_SDMMC_EXT *)hba->ext;
+	ccb->cam_devctl_status = EINVAL;
+
+	/* Never derive or dereference the variable payload until the fixed header fits. */
+	if( ccb->cam_devctl_size < sizeof( SDMMC_CARD_REGISTER ) ) {
+		return( CAM_REQ_CMP );
+	}
+
 	cr		= ccb->cam_devctl_data;
 	len		= ccb->cam_devctl_size - sizeof( SDMMC_CARD_REGISTER );
+	if( cr->length > len ) {
+		return( CAM_REQ_CMP );
+	}
+	len		= cr->length;
 	dptr	= (uint8_t *)(cr + 1);
 	ccb->cam_devctl_status = EOK;
 
@@ -2446,7 +2471,11 @@ int sdmmc_card_register_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 		cr->type = ext->instance.ident.dtype;
 	}
 	else if( cr->action == SDMMC_CR_ACTION_WRITE ) {
-		if( ( cr->type == SDMMC_REG_TYPE_EXT_CSD ) && ( ext->instance.ident.dtype == DEV_TYPE_MMC ) ) {
+		/* EXT_CSD writes consume one trailing byte; reject a header-only request. */
+		if( len != SDMMC_REG_SIZE_EXT_CSD_WRITE ) {
+			ccb->cam_devctl_status  = EINVAL;
+		}
+		else if( ( cr->type == SDMMC_REG_TYPE_EXT_CSD ) && ( ext->instance.ident.dtype == DEV_TYPE_MMC ) ) {
 			if( cr->address >= ECSD_REV ) {
 				ccb->cam_devctl_status  = EINVAL;
 			}
@@ -2556,28 +2585,29 @@ static int sdmmc_device_info_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	return( CAM_REQ_CMP );
 }
 
-static int sdmmc_dsm( SIM_HBA * const hba, SDMMC_PARTITION *part, DATA_SET_MGNT *dsm, const uint32_t dtype )
+static int sdmmc_dsm( SIM_HBA * const hba, SDMMC_PARTITION *part, const DATA_SET_MGNT *dsm, const uint32_t dtype )
 {
 	SIM_SDMMC_EXT		*ext;
-	DATA_SET_MGNT_RANGE *dsmr;
+	const DATA_SET_MGNT_RANGE *dsmr;
 	uint64_t			lba;
 	uint32_t			nlba;
-	uint64_t			pend;
+	uint32_t			i;
 	int					status;
 
 	ext		= (SIM_SDMMC_EXT *)hba->ext;
-	dsmr	= (DATA_SET_MGNT_RANGE *)(dsm + 1);
-	pend	= part->slba + part->nlba - 1;
+	dsmr	= (const DATA_SET_MGNT_RANGE *)(dsm + 1);
 	status  = EOK;
 
 		// Note:  dsm->nranges == 0 is used to test for support
-	for( ; dsm->nranges; dsmr++, dsm->nranges-- ) {
+	for( i = 0U; i < dsm->nranges; ++i, ++dsmr ) {
 		nlba	= dsmr->nlba;
-		lba		= part->slba + dsmr->lba;
-		if( ( lba > pend ) || ( ( lba + nlba - 1 ) > pend ) ) {
+		if( ( nlba == 0U ) || ( dsmr->lba >= part->nlba ) ||
+				( nlba > ( part->nlba - dsmr->lba ) ) ||
+				( part->slba > ( UINT64_MAX - dsmr->lba ) ) ) {
 			status = EINVAL;
 			break;
 		}
+		lba = part->slba + dsmr->lba;
 
 		status = sdio_erase( ext->device, part->config, dtype, lba, nlba );
 		if( status ) {
@@ -2606,17 +2636,25 @@ static int sdmmc_dsm_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	SIM_SDMMC_EXT		*ext;
 	SDMMC_PARTITION		*part;
 	DATA_SET_MGNT		*dsm;
+	size_t				available;
 	int					status;
 
 	ext		= (SIM_SDMMC_EXT *)hba->ext;
+	if( ccb->cam_devctl_size < sizeof( DATA_SET_MGNT ) ) {
+		ccb->cam_devctl_status = EINVAL;
+		return( CAM_REQ_CMP );
+	}
 	dsm		= ccb->cam_devctl_data;
 	part	= &ext->targets[ccb->cam_ch.cam_target_id].partitions[ccb->cam_ch.cam_target_lun];
+	available = ccb->cam_devctl_size - sizeof( DATA_SET_MGNT );
 
-	if( sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb ) != CAM_REQ_CMP ) {
-		status = EIO;
-	}
-	else if( ccb->cam_devctl_size < ( sizeof( DATA_SET_MGNT ) + sizeof( DATA_SET_MGNT_RANGE ) * dsm->nranges ) ) {
+	/* Division-based validation avoids overflow and precedes every range read. */
+	if( ( dsm->nranges > SDMMC_MAX_DSM_RANGES ) ||
+			( dsm->nranges > ( available / sizeof( DATA_SET_MGNT_RANGE ) ) ) ) {
 		status = EINVAL;
+	}
+	else if( sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb ) != CAM_REQ_CMP ) {
+		status = EIO;
 	}
 	else {
 		switch( dsm->opt ) {
@@ -2752,7 +2790,7 @@ static int sdmmc_pwr_mgnt_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	return( CAM_REQ_CMP );
 }
 
-static int sdmmc_rpmb_info( SIM_HBA * const hba, CCB_DEVCTL *ccb, RPMB_INFO *info, const int minsz )
+static int sdmmc_rpmb_info( SIM_HBA * const hba, CCB_DEVCTL *ccb, RPMB_INFO *info, const size_t minsz )
 {
 	SIM_SDMMC_EXT	*ext;
 	SDMMC_PARTITION	*part;
@@ -2805,23 +2843,44 @@ static int sdmmc_rpmb_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	RPMB_CMDHDR			*req;
 	RPMB_INFO			info;
 	rpmb_frame_jedec_t	*pf;
+	size_t				available_frame_bytes;
+	size_t				required_size;
+	uint32_t			write_flags;
 
 	ext	= (SIM_SDMMC_EXT *)hba->ext;
+	if( ccb->cam_devctl_size < sizeof( RPMB_CMDHDR ) ) {
+		ccb->cam_devctl_status = EINVAL;
+		return( CAM_REQ_CMP );
+	}
 	req	= ccb->cam_devctl_data;
+	nf = (uint32_t)req->nframes;
+	available_frame_bytes = ccb->cam_devctl_size - sizeof( RPMB_CMDHDR );
 
-	status = sdmmc_rpmb_info( hba, ccb, &info, sizeof( RPMB_CMDHDR ) + req->nframes * RPMB_FRAME_SIZE );
+	/* Validate the count and operation before using them in allocation or DMA sizes. */
+	if( ( nf == 0 ) || ( nf > SDIO_RPMB_PROTOCOL_MAX_FRAMES ) ||
+			( nf > ( available_frame_bytes / RPMB_FRAME_SIZE ) ) ||
+			( ( req->flags != RPMB_FLG_READ ) &&
+			  ( req->flags != RPMB_FLG_WRITE ) &&
+			  ( req->flags != RPMB_FLG_RL_WRITE ) ) ) {
+		ccb->cam_devctl_status = EINVAL;
+		return( CAM_REQ_CMP );
+	}
+	required_size = sizeof( RPMB_CMDHDR ) + (size_t)nf * RPMB_FRAME_SIZE;
+	status = sdmmc_rpmb_info( hba, ccb, &info, required_size );
 	if( status != EOK ) {
 		ccb->cam_devctl_status = status;
 		return( CAM_REQ_CMP );
 	}
 
-	if( req->flags == RPMB_FLG_RL_WRITE ) {
+	if( req->flags != RPMB_FLG_READ ) {
 		if( info.flags & RPMB_FLAG_WP ) {
 			ccb->cam_devctl_status = EACCES;
 			return( CAM_REQ_CMP );
 		}
-		if( info.maxio < req->nframes ) {
-			cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s: frame count[%d] exceed maximum write count[%d]", __FUNCTION__, req->nframes, info.maxio );
+	}
+	if( req->flags == RPMB_FLG_RL_WRITE ) {
+		if( info.maxio < nf ) {
+			cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s: frame count[%u] exceed maximum write count[%u]", __FUNCTION__, (unsigned)nf, (unsigned)info.maxio );
 			ccb->cam_devctl_status = EINVAL;
 			return( CAM_REQ_CMP );
 		}
@@ -2846,9 +2905,13 @@ static int sdmmc_rpmb_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	}
 
 	pf = (rpmb_frame_jedec_t *)( req + 1 );
-		// Write authentication key or data, use reliable write
+		// Write authentication key or data with the caller-selected write mode.
 	if( req->flags != RPMB_FLG_READ ) {
-		status = sdio_mmc_rpmb_rw( ext->device, pf, req->nframes, SCF_DIR_OUT | SCF_SBC_RLW );
+		write_flags = SCF_DIR_OUT;
+		if( req->flags == RPMB_FLG_RL_WRITE ) {
+			write_flags |= SCF_SBC_RLW;
+		}
+		status = sdio_mmc_rpmb_rw( ext->device, pf, nf, write_flags );
 		if( status != EOK ) {
 			cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s, %d: sdio_mmc_rpmb_rw failure: %s", __FUNCTION__, __LINE__, strerror( status ) );
 			sdmmc_reset( hba );
@@ -2872,7 +2935,9 @@ static int sdmmc_rpmb_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	}
 
 		// read data, write counter or write result
-	nf = ( req->flags == RPMB_FLG_READ ) ? req->nframes : 1;
+	if( req->flags != RPMB_FLG_READ ) {
+		nf = 1;
+	}
 	status = sdio_mmc_rpmb_rw( ext->device, pf, nf, SCF_DIR_IN );
 	if( status != EOK ) {
 		cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s, %d: sdio_mmc_rpmb_rw failure: %s", __FUNCTION__, __LINE__, strerror( status ) );
@@ -2897,14 +2962,20 @@ static int sdmmc_rpmb_info_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 static int sdmmc_gencmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 {
 	SIM_SDMMC_EXT	*ext;
-	SDMMC_GEN_CMD	*req;
+	SDMMC_GEN_CMD	req;
 	int				status;
 	void			*buf;
 	uint32_t		flags;
 	uint32_t		arg;
+	uint8_t			*cursor;
+	size_t			remaining;
+	size_t			record_size;
+	uint32_t		command_count;
 
 	ext		= (SIM_SDMMC_EXT *)hba->ext;
-	req		= ccb->cam_devctl_data;
+	cursor	= ccb->cam_devctl_data;
+	remaining = ccb->cam_devctl_size;
+	command_count = 0;
 
 	status = sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb );
 	if( status != CAM_REQ_CMP ) {
@@ -2915,18 +2986,30 @@ static int sdmmc_gencmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	sdmmc_bkops( hba, CAM_FALSE );	// Check for urgent background operations
 
 	for( ; ; ) {
-		buf		= (void *)( req + 1 );
+		/* Each NEXT record must fit completely inside this devctl message. */
+		if( remaining < sizeof( req ) ) {
+			ccb->cam_devctl_status = EINVAL;
+			break;
+		}
+		memcpy( &req, cursor, sizeof( req ) );
+		if( req.blklen > ( remaining - sizeof( req ) ) ) {
+			ccb->cam_devctl_status = EINVAL;
+			break;
+		}
+		record_size = sizeof( req ) + req.blklen;
+		/* The IN destination ends at record_size, immediately before any NEXT header. */
+		buf		= cursor + sizeof( req );
 		flags	= SCF_CTYPE_ADTC | SCF_RSP_R1;
-		arg		= req->arg;
+		arg		= req.arg;
 
-		if( ( req->flags & SDMMC_GENCMD_DIR ) == SDMMC_GENCMD_READ ) {
+		if( ( req.flags & SDMMC_GENCMD_DIR ) == SDMMC_GENCMD_READ ) {
 			flags |= SCF_DIR_IN;
 		}
 		else {
 			flags |= SCF_DIR_OUT;
 		}
 
-		status = sdio_mmc_gen_man( ext->device, MMC_GEN_CMD, buf, req->blklen, 1, arg, flags);
+		status = sdio_mmc_gen_man( ext->device, MMC_GEN_CMD, buf, req.blklen, 1, arg, flags);
 		if( status != EOK ) {
 			cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s, %d: sdio_mmc_gencmd failure: %s", __FUNCTION__, __LINE__, strerror( status ) );
 			sdmmc_reset( hba );
@@ -2936,11 +3019,16 @@ static int sdmmc_gencmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 
 		ccb->cam_devctl_status = EOK;
 
-		if( ( req->flags & SDMMC_GENCMD_NEXT ) == 0 ) {
+		if( ( req.flags & SDMMC_GENCMD_NEXT ) == 0 ) {
 			break;
 		}
 
-		req = (SDMMC_GEN_CMD *)( (uintptr_t)buf + req->blklen );
+		if( ++command_count >= SDMMC_MAX_CHAINED_COMMANDS ) {
+			ccb->cam_devctl_status = E2BIG;
+			break;
+		}
+		cursor += record_size;
+		remaining -= record_size;
 	}
 
 	return( CAM_REQ_CMP );
@@ -2949,15 +3037,21 @@ static int sdmmc_gencmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 static int sdmmc_mancmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 {
 	SIM_SDMMC_EXT	*ext;
-	SDMMC_MAN_CMD	*req;
+	SDMMC_MAN_CMD	req;
 	int				status;
 	uint8_t			op;
 	void			*buf;
 	uint32_t		flags;
 	uint32_t		arg;
+	uint8_t			*cursor;
+	size_t			remaining;
+	size_t			record_size;
+	uint32_t		command_count;
 
 	ext		= (SIM_SDMMC_EXT *)hba->ext;
-	req		= ccb->cam_devctl_data;
+	cursor	= ccb->cam_devctl_data;
+	remaining = ccb->cam_devctl_size;
+	command_count = 0;
 
 	status = sdmmc_unit_ready( hba, (CCB_SCSIIO *)ccb );
 	if( status != CAM_REQ_CMP ) {
@@ -2968,30 +3062,42 @@ static int sdmmc_mancmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	sdmmc_bkops( hba, CAM_FALSE );	// Check for urgent background operations
 
 	for( ; ; ) {
-		op = req->flags & SDMMC_MANCMD_CMD;
+		/* Copy possibly unaligned chained headers only after their full record fits. */
+		if( remaining < sizeof( req ) ) {
+			ccb->cam_devctl_status = EINVAL;
+			break;
+		}
+		memcpy( &req, cursor, sizeof( req ) );
+		if( req.blklen > ( remaining - sizeof( req ) ) ) {
+			ccb->cam_devctl_status = EINVAL;
+			break;
+		}
+		record_size = sizeof( req ) + req.blklen;
+		op = req.flags & SDMMC_MANCMD_CMD;
 		if( ( op < MMC_MAN_CMD1 ) || ( op > MMC_MAN_CMD4 ) ) {
 			ccb->cam_devctl_status = ENOTSUP;
 			break;
 		}
 
-		buf		= ( req->flags & SDMMC_MANCMD_ADTC ) ? (void *)( req + 1 ) : NULL;
+		/* An ADTC IN transfer is limited to this record's validated blklen payload. */
+		buf		= ( req.flags & SDMMC_MANCMD_ADTC ) ? cursor + sizeof( req ) : NULL;
 		flags	= 0;
-		arg		= req->arg;
+		arg		= req.arg;
 
-		if( ( req->flags & SDMMC_MANCMD_TYPE ) == SDMMC_MANCMD_ADTC ) {
+		if( ( req.flags & SDMMC_MANCMD_TYPE ) == SDMMC_MANCMD_ADTC ) {
 			flags |= SCF_CTYPE_ADTC;
 		}
-		if( ( req->flags & SDMMC_MANCMD_DIR ) == SDMMC_MANCMD_READ ) {
+		if( ( req.flags & SDMMC_MANCMD_DIR ) == SDMMC_MANCMD_READ ) {
 			flags |= SCF_DIR_IN;
 		}
-		if( ( req->flags & SDMMC_MANCMD_RSP ) == SDMMC_MANCMD_R1 ) {
+		if( ( req.flags & SDMMC_MANCMD_RSP ) == SDMMC_MANCMD_R1 ) {
 			flags |= SCF_RSP_R1;
 		}
 		else {
 			flags |= SCF_RSP_R1B;
 		}
 
-		status = sdio_mmc_gen_man( ext->device, op, buf, req->blklen, 1, arg, flags);
+		status = sdio_mmc_gen_man( ext->device, op, buf, req.blklen, 1, arg, flags);
 		if( status != EOK ) {
 			cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s, %d: sdio_mmc_mancmd failure: %s", __FUNCTION__, __LINE__, strerror( status ) );
 			sdmmc_reset( hba );
@@ -3001,11 +3107,16 @@ static int sdmmc_mancmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 
 		ccb->cam_devctl_status = EOK;
 
-		if( ( req->flags & SDMMC_MANCMD_NEXT ) == 0 ) {
+		if( ( req.flags & SDMMC_MANCMD_NEXT ) == 0 ) {
 			break;
 		}
 
-		req = (SDMMC_MAN_CMD *)( (uintptr_t)((void *)( req + 1 )) + req->blklen );
+		if( ++command_count >= SDMMC_MAX_CHAINED_COMMANDS ) {
+			ccb->cam_devctl_status = E2BIG;
+			break;
+		}
+		cursor += record_size;
+		remaining -= record_size;
 	}
 
 	return( CAM_REQ_CMP );
@@ -3013,40 +3124,85 @@ static int sdmmc_mancmd_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 
 static int sdmmc_devctl_perm( CCB_DEVCTL *ccb )
 {
-	int		ret;
+	int			ret;
+	uint32_t	required;
 
 	ret = CAM_REQ_INPROG;
+	required = 0;
 
 	switch( ccb->cam_devctl_dcmd ) {
 		case DCMD_SDMMC_DEVICE_INFO:
-		case DCMD_SDMMC_ERASE:
-		case DCMD_SDMMC_WRITE_PROTECT:
-		case DCMD_SDMMC_CARD_REGISTER:
 		case DCMD_SDMMC_ASSD_STATUS:
 		case DCMD_SDMMC_ASSD_PROPERTIES:
+		case DCMD_CAM_DEV_SERIAL_NUMBER:
+		case DCMD_RPMB_INFO:
+			required = _IO_FLAG_RD;
+			break;
+
+		case DCMD_SDMMC_ERASE:
 		case DCMD_SDMMC_ASSD_CONTROL:
 		case DCMD_SDMMC_ASSD_APDU:
 		case DCMD_SDMMC_LOCK_UNLOCK:
-		case DCMD_SDMMC_PART_INFO:
-		case DCMD_SDMMC_PWR_MGNT:
 		case DCMD_CAM_VERBOSITY:
-		case DCMD_CAM_DEV_SERIAL_NUMBER:
 		case DCMD_CAM_DATA_SET_MGNT:
-		case DCMD_RPMB_INFO:
 		case DCMD_RPMB_CMD:
 		case DCMD_SDMMC_GEN_CMD:
 		case DCMD_SDMMC_MAN_CMD:
 		case DCMD_SDMMC_DRVR_STATE:
-				// fail requests without RD or WR
-			if( !( ccb->cam_devctl_ioflag & ( _IO_FLAG_RD | _IO_FLAG_WR ) ) ) {
-				cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s:  dcmd 0x%x, EACCES", __FUNCTION__, ccb->cam_devctl_dcmd );
-				ccb->cam_devctl_status = EACCES;
-				ret = CAM_REQ_CMP;
+			required = _IO_FLAG_WR;
+			break;
+
+		case DCMD_SDMMC_WRITE_PROTECT:
+			/* Query actions remain available on O_RDONLY; set/clear require O_WRONLY/RDWR. */
+			if( ( ccb->cam_devctl_size >= sizeof( SDMMC_WRITE_PROTECT ) ) &&
+					( ( (SDMMC_WRITE_PROTECT *)ccb->cam_devctl_data )->action == SDMMC_WP_ACTION_PROT ||
+					  ( (SDMMC_WRITE_PROTECT *)ccb->cam_devctl_data )->action == SDMMC_WP_ACTION_PROT_TYPE ) ) {
+				required = _IO_FLAG_RD;
+			}
+			else {
+				required = _IO_FLAG_WR;
+			}
+			break;
+
+		case DCMD_SDMMC_CARD_REGISTER:
+			if( ( ccb->cam_devctl_size >= sizeof( SDMMC_CARD_REGISTER ) ) &&
+					( (SDMMC_CARD_REGISTER *)ccb->cam_devctl_data )->action == SDMMC_CR_ACTION_READ ) {
+				required = _IO_FLAG_RD;
+			}
+			else {
+				required = _IO_FLAG_WR;
+			}
+			break;
+
+		case DCMD_SDMMC_PART_INFO:
+			if( ( ccb->cam_devctl_size >= sizeof( SDMMC_PARTITION_INFO ) ) &&
+					( (SDMMC_PARTITION_INFO *)ccb->cam_devctl_data )->action == SDMMC_PI_ACTION_GET ) {
+				required = _IO_FLAG_RD;
+			}
+			else {
+				required = _IO_FLAG_WR;
+			}
+			break;
+
+		case DCMD_SDMMC_PWR_MGNT:
+			if( ( ccb->cam_devctl_size >= sizeof( SDMMC_PWR_MGNT ) ) &&
+					( (SDMMC_PWR_MGNT *)ccb->cam_devctl_data )->action == SDMMC_PM_ACTION_GET ) {
+				required = _IO_FLAG_RD;
+			}
+			else {
+				required = _IO_FLAG_WR;
 			}
 			break;
 
 		default:
 			break;
+	}
+
+	/* A read-only descriptor must never authorize media or driver mutations. */
+	if( required && !( ccb->cam_devctl_ioflag & required ) ) {
+		cam_slogf( _SLOGC_SIM_MMC, _SLOG_ERROR, 1, 1, "%s:  dcmd 0x%x, EACCES", __FUNCTION__, ccb->cam_devctl_dcmd );
+		ccb->cam_devctl_status = EACCES;
+		ret = CAM_REQ_CMP;
 	}
 
 	return( ret );

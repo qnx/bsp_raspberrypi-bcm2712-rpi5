@@ -69,57 +69,52 @@
 #define RP1_PCIE_MSIX_IRQ_46_UART5_SET_REG   (0x800U + 0xc0U)
 #define RP1_PCIE_MSIX_CFG_N_IACK             (1U << 2U)
 
-static uintptr_t rpi_msix_cfg_base = (uintptr_t)MAP_FAILED;
-static uint32_t  rpi_msix_cfg_set_reg = 0U;
-
 void variant_intr_init(DEV_PL011 *dev) {
+	dev->intr_unmask_base = (uintptr_t)MAP_FAILED;
+	dev->intr_unmask_reg = 0U;
 
-	if (dev->intr == RP1_PCIE_MSIX_UART0_IRQ) {
-		rpi_msix_cfg_set_reg = RP1_PCIE_MSIX_IRQ_25_UART0_SET_REG;
-	}
-	else if (dev->intr == RP1_PCIE_MSIX_UART1_IRQ) {
-		rpi_msix_cfg_set_reg = RP1_PCIE_MSIX_IRQ_42_UART1_SET_REG;
-	}
-	else if (dev->intr == RP1_PCIE_MSIX_UART2_IRQ) {
-		rpi_msix_cfg_set_reg = RP1_PCIE_MSIX_IRQ_43_UART2_SET_REG;
-	}
-	else if (dev->intr == RP1_PCIE_MSIX_UART3_IRQ) {
-		rpi_msix_cfg_set_reg = RP1_PCIE_MSIX_IRQ_44_UART3_SET_REG;
-	}
-	else if (dev->intr == RP1_PCIE_MSIX_UART4_IRQ) {
-		rpi_msix_cfg_set_reg = RP1_PCIE_MSIX_IRQ_45_UART4_SET_REG;
-	}
-	else if (dev->intr == RP1_PCIE_MSIX_UART5_IRQ) {
-		rpi_msix_cfg_set_reg = RP1_PCIE_MSIX_IRQ_46_UART5_SET_REG;
-	}
-	else {
-	    /* do nothing */
-	    rpi_msix_cfg_set_reg = 0U;
-	}
-
-	if (rpi_msix_cfg_set_reg != 0U) {
-	    rpi_msix_cfg_base = (uintptr_t)mmap_device_memory (NULL, RP1_PCIE_MSIX_SIZE,
-			   (PROT_READ | PROT_WRITE | PROT_NOCACHE), 0, RP1_PCIE_MSIX_ADDR);
-		if (rpi_msix_cfg_base == (uintptr_t)MAP_FAILED) {
-		    (void)slogf (_SLOG_SETCODE (_SLOGC_CHAR, 0), _SLOG_NOTICE, "Failed to map RP1 PCIe");
-		}
-	}
-
+	/* Resolve a firmware-selected console IRQ before choosing its MSI-X IACK. */
 	if (dev->is_debug_console != 0U) {
 	    const int32_t ret = fdt_debug_console_irq_fix(dev);
-	    /* Retrieve IRQ from runtime FDT for default debug console */
 	    if (ret != 0) {
-            (void)slogf (_SLOG_SETCODE (_SLOGC_CHAR, 0), _SLOG_ERROR, "Unable to get debug console IRQ from FDT, ret: %d", ret);
+	        (void)slogf (_SLOG_SETCODE (_SLOGC_CHAR, 0), _SLOG_ERROR, "Unable to get debug console IRQ from FDT, ret: %d", ret);
 	    }
+	}
+
+	if (dev->intr == RP1_PCIE_MSIX_UART0_IRQ) {
+		dev->intr_unmask_reg = RP1_PCIE_MSIX_IRQ_25_UART0_SET_REG;
+	}
+	else if (dev->intr == RP1_PCIE_MSIX_UART1_IRQ) {
+		dev->intr_unmask_reg = RP1_PCIE_MSIX_IRQ_42_UART1_SET_REG;
+	}
+	else if (dev->intr == RP1_PCIE_MSIX_UART2_IRQ) {
+		dev->intr_unmask_reg = RP1_PCIE_MSIX_IRQ_43_UART2_SET_REG;
+	}
+	else if (dev->intr == RP1_PCIE_MSIX_UART3_IRQ) {
+		dev->intr_unmask_reg = RP1_PCIE_MSIX_IRQ_44_UART3_SET_REG;
+	}
+	else if (dev->intr == RP1_PCIE_MSIX_UART4_IRQ) {
+		dev->intr_unmask_reg = RP1_PCIE_MSIX_IRQ_45_UART4_SET_REG;
+	}
+	else if (dev->intr == RP1_PCIE_MSIX_UART5_IRQ) {
+		dev->intr_unmask_reg = RP1_PCIE_MSIX_IRQ_46_UART5_SET_REG;
+	}
+
+	if (dev->intr_unmask_reg != 0U) {
+	    dev->intr_unmask_base = (uintptr_t)mmap_device_memory (NULL, RP1_PCIE_MSIX_SIZE,
+			   (PROT_READ | PROT_WRITE | PROT_NOCACHE), 0, RP1_PCIE_MSIX_ADDR);
+		if (dev->intr_unmask_base == (uintptr_t)MAP_FAILED) {
+		    (void)slogf (_SLOG_SETCODE (_SLOGC_CHAR, 0), _SLOG_NOTICE, "Failed to map RP1 PCIe");
+		}
 	}
 
 	return;
 }
 
-void variant_intr_unmask(void)
+void variant_intr_unmask(DEV_PL011 *dev)
 {
-	if ((rpi_msix_cfg_base != (uintptr_t)MAP_FAILED)) {
-	    out32(rpi_msix_cfg_base + rpi_msix_cfg_set_reg, RP1_PCIE_MSIX_CFG_N_IACK);
+	if ((dev->intr_unmask_base != (uintptr_t)MAP_FAILED) && (dev->intr_unmask_reg != 0U)) {
+	    out32(dev->intr_unmask_base + dev->intr_unmask_reg, RP1_PCIE_MSIX_CFG_N_IACK);
 	}
 }
 

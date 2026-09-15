@@ -42,20 +42,46 @@
 void
 fdt_init(paddr_t paddr) {
 	void	*header = 0;
+	size_t	declared_size;
 
 	if(fdt == NULL) {
 		fdt_paddr = paddr;
+		fdt_size = 0;
+
+		/* Validate the fixed-header extent before the first physical mapping. */
+		if((fdt_paddr == 0) || ((fdt_paddr % 4U) != 0U) ||
+				(fdt_paddr > (NULL_PADDR -
+					(paddr_t)(sizeof(struct fdt_header) - 1U)))) {
+			return;
+		}
 
 		header = startup_memory_map(sizeof(struct fdt_header), fdt_paddr, PROT_READ);
 
-		if(fdt_check_header(header) == 0) {
-			fdt_size = fdt_totalsize(header);
+		if((header != NULL) && (fdt_check_header(header) == 0)) {
+			declared_size = (size_t)fdt_totalsize(header);
+			if((declared_size >= sizeof(struct fdt_header)) &&
+					(declared_size <= STARTUP_FDT_MAX_SIZE) &&
+					((paddr_t)(declared_size - 1U) <=
+					 (NULL_PADDR - fdt_paddr))) {
+				fdt_size = declared_size;
+			}
 		}
 
-		startup_memory_unmap(header);
+		if(header != NULL) {
+			startup_memory_unmap(header);
+		}
 
 		if(fdt_size != 0) {
 			fdt = startup_memory_map(fdt_size, fdt_paddr, PROT_READ);
+			/* The full mapping must still contain the header we validated. */
+			if((fdt == NULL) || (fdt_check_header(fdt) != 0) ||
+					((size_t)fdt_totalsize(fdt) != fdt_size)) {
+				if(fdt != NULL) {
+					startup_memory_unmap(fdt);
+				}
+				fdt = NULL;
+				fdt_size = 0;
+			}
 		}
 	}
 }
