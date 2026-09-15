@@ -80,21 +80,31 @@ void						(*uefi_exit_boot_services_f)(void) = NULL;
 void						_main(void);
 
 extern struct bootargs_entry	boot_args;	//filled in by mkifs
+extern char				boot_args_end;	//end of the owned startup bootargs arena
 
 extern int	main(int argc,char **argv,char **envv);
 
 static char				*argv[20], *envv[20];
 
+static size_t
+startup_bootargs_capacity(void) {
+	return (size_t)((uintptr_t)&boot_args_end - (uintptr_t)&boot_args);
+}
+
 static void
 setup_cmdline(void) {
 	char		*args;
 	int			i, argc, envc;
+	size_t const	capacity = startup_bootargs_capacity();
 
 	//
 	// Find and construct argument and environment vectors for ourselves
 	//
 
-	tweak_cmdline(&boot_args, "startup");
+	tweak_cmdline_with_capacity(&boot_args, "startup", capacity);
+	if (!bootstrap_args_validate(&boot_args, capacity)) {
+		crash("invalid adjusted startup bootargs");
+	}
 
 	argc = envc = 0;
 	args = boot_args.args;
@@ -117,12 +127,22 @@ setup_cmdline(void) {
 static void
 stack_check_init(void) {
 	extern void *stack_addr_lo;
-	stack_addr = (uintptr_t)&stack_addr_lo + ((boot_args.size_hi << 8) | boot_args.size_lo);
+	/* boot_args has a dedicated arena; the entire startup stack is available. */
+	stack_addr = (uintptr_t)&stack_addr_lo;
 }
 
 void
 _main(void) {
 	void *syspage_mem = NULL;
+	unsigned const boot_size = boot_args.size_lo | (boot_args.size_hi << 8);
+	size_t const boot_capacity = startup_bootargs_capacity();
+
+	/* Reject a malformed image before any variable-length bootargs access. */
+	if ((boot_size < offsetof(struct bootargs_entry, args)) ||
+			(boot_size > boot_capacity) ||
+			!bootstrap_args_validate(&boot_args, boot_capacity)) {
+		crash("invalid startup bootargs size");
+	}
 
 	shdr = (struct startup_header *)(uintptr_t)boot_args.shdr_addr;
 	if(shdr == (void *)SHDR_ADDR_64) {
@@ -130,8 +150,10 @@ _main(void) {
 		// field isn't enough to hold the address of the startup header. The
 		// mkifs program hides the 8 byte address of the structure following
 		// the args/env strings in this case/.
-		unsigned const boot_size = boot_args.size_lo | (boot_args.size_hi << 8);
 		uint64_t real_shdr;
+		if (boot_size < (offsetof(struct bootargs_entry, args) + sizeof(real_shdr))) {
+			crash("invalid 64-bit startup header bootargs");
+		}
 		// extract with memmove() to avoid alignment problems
 		memmove(&real_shdr, (uint8_t *)&boot_args + boot_size - sizeof(real_shdr), sizeof(real_shdr));
 		shdr = (struct startup_header *)(uintptr_t)real_shdr;

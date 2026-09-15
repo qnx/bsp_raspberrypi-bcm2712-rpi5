@@ -291,27 +291,29 @@ int main(const int argc, char *const argv[])
             case 'i':
                 {
                     const char *str = optarg;
-                    char *token;
                     irq_num = 0;
                     while (str != NULL) {
+                        char *end = NULL;
+                        unsigned long irq;
+
+                        /* Reject excess entries before indexing the fixed stack array. */
+                        if (irq_num >= RP1_PCIE_MSIX_IRQ_SIZE) {
+                            (void)fprintf(stderr, "Too many IRQs; maximum is %u\n", RP1_PCIE_MSIX_IRQ_SIZE);
+                            exit(EXIT_FAILURE);
+                        }
+
                         errno = EOK;
-                        irq_list[irq_num] = (uint_t) strtoul(str, NULL, 0);
-                        if (errno == EOK) {
-                            if (irq_list[irq_num] >= RP1_PCIE_MSIX_IRQ_SIZE) {
-                                (void)fprintf(stderr, "Invalid IRQ: %u, make sure IRQ is between 0 ~ %u\n", irq_list[irq_num], RP1_PCIE_MSIX_IRQ_SIZE-1U);
-                                exit (EXIT_FAILURE);
-                            }
-                        }
-                        else {
+                        irq = strtoul(str, &end, 0);
+                        if ((errno != EOK) || (end == str) ||
+                                ((*end != '\0') && (*end != ',')) ||
+                                (irq >= RP1_PCIE_MSIX_IRQ_SIZE)) {
                             (void)fprintf(stderr, "Invalid IRQ entered, make sure IRQ is between 0 ~ %u\n", RP1_PCIE_MSIX_IRQ_SIZE-1U);
-                            exit (EXIT_FAILURE);
+                            exit(EXIT_FAILURE);
                         }
-                        token = strchr(str, ',');
-                        if (token != NULL) {
-                            *token++ = '\0';
-                        }
-                        str = token;
+
+                        irq_list[irq_num] = (uint_t)irq;
                         irq_num++;
+                        str = (*end == ',') ? end + 1 : NULL;
                     }
                 }
                 break;

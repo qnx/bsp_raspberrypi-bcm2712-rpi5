@@ -107,11 +107,16 @@
 
 
     ############################################################################################
-    ## Start the main shell
+    ## Interactive serial shell
+    ##
+    ## Production images intentionally do not attach a root shell to /dev/ser10;
+    ## doing so bypasses authentication for anyone with physical UART access.
+    ## DEVELOPMENT ONLY: on a physically controlled lab system, uncomment these
+    ## lines to restore the original diagnostic shell.
     ############################################################################################
-    reopen /dev/ser10
-    display_msg "Starting shell ..."
-    [+session] ksh &
+    # reopen /dev/ser10
+    # display_msg "Starting development shell ..."
+    # [+session] ksh &
 }
 
 
@@ -254,13 +259,15 @@ fi
 /etc/pf.os=${QNX_TARGET}/etc/pf.os
 
 ################################################################################################
-## Remote_debug
+## Remote debugging (development-only opt-in)
+##
+## qconn provides unauthenticated superuser-level remote execution and must not
+## be present in a production image. To build a lab-only debugging image, add
+## these tools back and enable the local-only launch in net_start.sh below.
 ################################################################################################
-/sbin/devc-pty=devc-pty
-
-/usr/bin/pdebug=pdebug
-
-/usr/sbin/qconn=qconn
+# /sbin/devc-pty=devc-pty
+# /usr/bin/pdebug=pdebug
+# /usr/sbin/qconn=qconn
 
 ################################################################################################
 ## Network services (ssh and dhcpcd) support
@@ -496,11 +503,12 @@ sshd:x:15:6:sshd:/var/chroot/sshd:/bin/false
 qnxuser:x:1000:1000:QNX User:/home/qnxuser:/bin/sh
 }
 
-## Enabled Username/Password: root/root, qnxuser/qnxuser
-[uid=0 gid=0 perms=0644] /etc/shadow = {
-root:@S@NKlWES1quMp1wmqugkUSnFEpPGn58kIs4wQOgDDNs06vimR+bbGPUKM+9P6jbFUzo3Rm+Qe5MS+17xKhwaeJEg==@Mjg5ZTJiMTM0YTRjYTE2ZGFjMDdhZTFlY2NlMDVmNmE=:1468494669:0:0
+## Password authentication is locked by default. Provision unique, per-device
+## credentials or authorized SSH keys as part of the deployment process.
+[uid=0 gid=0 perms=0600] /etc/shadow = {
+root:*:1468494669:0:0
 sshd:*:1231323780:0:0
-qnxuser:@S@HZERXjgixvb3157FFeraShhvTVw+10ccUtVUVZbi0fUwpzlzBZFw5gHiFd1XHKit8D39Whe749XAY8fV4P5ANQ==@Y2ZlOTg3M2RhNTM4Y2M2ODY0OWZhODdiNDRkMmU5Nzg=:1468488235:0:0
+qnxuser:*:1468488235:0:0
 }
 
 [uid=0 gid=0 perms=0644] /etc/group = {
@@ -776,7 +784,10 @@ uart4_console.sh = {
 
   devc-serpl011-rpi5 -b115200 -v -c50000000 -e -F -u4 0x1f00040000,0xcd &
   waitfor /dev/ser4
-  on -t /dev/ser4 /bin/sh
+
+  # Do not attach an unauthenticated root shell in production.
+  # DEVELOPMENT ONLY: uncomment on a physically controlled lab system.
+  # on -t /dev/ser4 /bin/sh
 }
 
 uart2_console.sh = {
@@ -788,7 +799,10 @@ uart2_console.sh = {
 
   devc-serpl011-rpi5 -b115200 -v -c50000000 -e -F -u2 0x1f00038000,0xcb &
   waitfor /dev/ser2
-  on -t /dev/ser2 /bin/sh
+
+  # Do not attach an unauthenticated root shell in production.
+  # DEVELOPMENT ONLY: uncomment on a physically controlled lab system.
+  # on -t /dev/ser2 /bin/sh
 }
 
 ################################################################################################
@@ -820,13 +834,15 @@ dhcpcd -bqq
 /proc/boot/.ssh-server.sh
 
 ############################################################################################
-## REMOTE_DEBUG: gdb or Momentics
-##  - refer to the help documentation for the gdb, qconn and the IDE
-##    for more information on remote debugging
-##  - the commands shown require that NETWORK is enabled too
+## REMOTE_DEBUG: gdb or Momentics (development-only opt-in)
+##
+## qconn is intentionally disabled because its protocol permits unauthenticated
+## superuser execution. For a controlled lab image, first include devc-pty,
+## pdebug and qconn above, then uncomment these lines. The -a option preserves
+## ASLR and -l restricts qconn to local connections; use an authenticated tunnel.
 ############################################################################################
-devc-pty
-qconn
+# devc-pty
+# qconn -a -l
 
 }
 
@@ -932,4 +948,3 @@ dhd_verbose=0
 ################################################################################################
 ## none official or private utils for debugging purpose, should be removed from official build
 ################################################################################################
-

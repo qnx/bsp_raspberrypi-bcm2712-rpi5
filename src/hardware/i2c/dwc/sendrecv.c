@@ -41,6 +41,16 @@
 
 #include "proto.h"
 
+/*
+ * Default driver resource policy for one send or receive phase.  Integrators
+ * may tune it after accounting for their memory and bus-occupancy budgets; a
+ * finite default prevents one client from retaining an arbitrarily large heap
+ * buffer in the resource manager.
+ */
+#ifndef DWC_I2C_MAX_TRANSFER_SIZE
+#define DWC_I2C_MAX_TRANSFER_SIZE (64U * 1024U)
+#endif
+
 static i2c_status_t dwc_i2c_sendrecv(void* const hdl, void* const txbuf,
                 const uint32_t txlen, void* const rxbuf, const uint32_t rxlen, const uint32_t stop)
 {
@@ -103,6 +113,14 @@ int _i2c_master_sendrecv(resmgr_context_t *ctp, io_devctl_t *msg, i2c_ocb_t *ocb
     }
 
     hdr = _IO_INPUT_PAYLOAD(msg);
+
+    if ((hdr->send_len > DWC_I2C_MAX_TRANSFER_SIZE) ||
+        (hdr->recv_len > DWC_I2C_MAX_TRANSFER_SIZE)) {
+        i2c_slogf(dev->verbosity, _SLOG_ERROR,
+                  "Sendrecv phase exceeds %u-byte driver limit",
+                  DWC_I2C_MAX_TRANSFER_SIZE);
+        return EMSGSIZE;
+    }
 
     if (hdr->send_len < hdr->recv_len) {
         maxbuflen = hdr->recv_len;

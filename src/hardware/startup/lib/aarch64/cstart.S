@@ -48,14 +48,24 @@
  * and sets SP to this stack, and then starts running C code in _main().
  */
 
+#include "../public/startup_abi.h"
+
 	.data
 	.globl	stack
 	.globl	stack_addr_lo
 	.globl	stack_addr_hi
 	.globl	boot_args
+	.globl	boot_args_end
 
 boot_args:
 	.ascii	"ddpvbskr"	/* signature for mkifs */
+	/*
+	 * Keep command-line growth out of the live startup stack. mkifs replaces
+	 * the signature with a variable-length bootargs_entry, and the C mutator
+	 * enforces this same capacity before moving or inserting any bytes.
+	 */
+	.space	STARTUP_BOOTARGS_CAPACITY - (. - boot_args)
+boot_args_end:
 
 	.align	4
 stack_addr_lo:

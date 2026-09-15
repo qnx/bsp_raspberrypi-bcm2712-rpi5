@@ -18,6 +18,12 @@ Note that this Git version of the BSP differs from the QNX Software Center (QSC)
 * You need to have a local QNX SDP to build this project. To start, get a QNX SDP 8.0 license and follow the official instructions to install QNX SDP 8.0 to your host machine.
 * In addition to a baseline SDP 8.0 installation, you will also need to confirm that you have installed all of the packages listed in "source.xml".
 
+## Security
+
+The default build disables unauthenticated remote debugging and serial shells, locks sample account passwords, and restricts direct fan control. These secure defaults intentionally differ from older evaluation images.
+
+Before deployment, review the [security guidance](SECURITY.md) and the accompanying [source-level remediation report](docs/security-remediation-report.html). Product integrators must still configure authenticated boot, SSH identity and policy, least-privilege abilities, device ACLs, bounded temporary storage, and release-specific dependency provenance.
+
 ## Notice on Software Maturity and Quality
 
 The software included in this repository is classified under our Software Maturity Standard as Experimental Software – Software Quality and Maturity Level (SQML) 1.

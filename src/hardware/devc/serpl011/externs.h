@@ -107,6 +107,9 @@ typedef struct dev_pl011 {
 	unsigned			chan_rx;
 	unsigned			chan_tx;
 	unsigned			is_debug_console;
+	/* Per-port interrupt-controller state; shared state breaks multi-port use. */
+	uintptr_t			intr_unmask_base;
+	uint32_t			intr_unmask_reg;
 
 #ifdef USE_DMA
 	dma_addr_t			buf_rx[2];

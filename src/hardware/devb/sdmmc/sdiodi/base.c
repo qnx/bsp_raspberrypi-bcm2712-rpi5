@@ -2095,6 +2095,12 @@ int sdio_options( sdio_hc_t *hc, char *options )
 				break;
 
 			case OPTION_BASE_ADDR:		// addr
+				/* Options may repeat, but the destination arrays are fixed-size. */
+				if( (unsigned)cfg->base_addrs >= SDIO_MAX_ADDR ) {
+					sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0, "%s:  Too many %s values", __FUNCTION__, opts[ opt ] );
+					status = E2BIG;
+					break;
+				}
 				sdio_parse_tuple( value, ':', &argstr[0], &argstr[1], NULL );
 				val64 = sdio_parse_number64( argstr[0] );
 				if( val64 != SDIO_INVALID_NUM ) {
@@ -2110,6 +2116,11 @@ int sdio_options( sdio_hc_t *hc, char *options )
 				break;
 
 			case OPTION_IRQ:			// irq
+				if( (unsigned)cfg->irqs >= SDIO_MAX_IRQ ) {
+					sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0, "%s:  Too many %s values", __FUNCTION__, opts[ opt ] );
+					status = E2BIG;
+					break;
+				}
 				val = sdio_parse_number( value );
 				if( val == SDIO_INVALID_NUM ) {
 					sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0, "%s:  Invalid %s", __FUNCTION__, opts[ opt ] );
@@ -2120,6 +2131,11 @@ int sdio_options( sdio_hc_t *hc, char *options )
 				break;
 
 			case OPTION_DMA:			// dma - dma channel
+				if( (unsigned)cfg->dma_chnls >= SDIO_MAX_DMA ) {
+					sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0, "%s:  Too many %s values", __FUNCTION__, opts[ opt ] );
+					status = E2BIG;
+					break;
+				}
 				val = sdio_parse_number( value );
 				if( val == SDIO_INVALID_NUM ) {
 					sdio_slogf( _SLOGC_SDIODI, _SLOG_ERROR, hc->cfg.verbosity, 0, "%s:  Invalid %s", __FUNCTION__, opts[ opt ] );

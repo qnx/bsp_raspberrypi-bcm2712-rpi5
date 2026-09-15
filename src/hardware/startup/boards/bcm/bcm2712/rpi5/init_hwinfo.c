@@ -53,47 +53,93 @@
 #define BCM2712_RP1_ENET_SIZE          0x4000
 #define BCM2712_RP1_ENET_IRQ           0xa6
 #define BCM2712_HWI_CGEM               "cgem"
+#define BCM2712_FDT_BOOTARGS_MAX        (4096U)
+
+static int hex_digit_value(const char digit)
+{
+    if ((digit >= '0') && (digit <= '9')) {
+        return digit - '0';
+    }
+    if ((digit >= 'a') && (digit <= 'f')) {
+        return digit - 'a' + 10;
+    }
+    if ((digit >= 'A') && (digit <= 'F')) {
+        return digit - 'A' + 10;
+    }
+    return -1;
+}
+
+static int parse_mac_address(const char *text, uint8_t *const mac)
+{
+    uint8_t parsed[6];
+    unsigned i;
+
+    if (strlen(text) != sizeof("00:00:00:00:00:00") - 1U) {
+        return 0;
+    }
+
+    for (i = 0U; i < 6U; ++i) {
+        const int high = hex_digit_value(text[0]);
+        const int low = hex_digit_value(text[1]);
+
+        if ((high < 0) || (low < 0)) {
+            return 0;
+        }
+        parsed[i] = (uint8_t)((high << 4) | low);
+        text += 2;
+
+        if (i != 5U) {
+            if (*text != ':') {
+                return 0;
+            }
+            ++text;
+        }
+    }
+
+    if (*text != '\0') {
+        return 0;
+    }
+    memcpy(mac, parsed, sizeof(parsed));
+    return 1;
+}
 
 static void fdt_get_mac_addr(uint8_t* const mac)
 {
-    static char *bootargs_str = NULL;
+    static const char mac_prefix[] = "smsc95xx.macaddr=";
+    char *bootargs_str;
+    char *next_arg;
 
     int const chosen = fdt_path_offset(fdt, "/chosen");
-    if (chosen <= 0) {
+    if (chosen < 0) {
         kprintf("Did not find chosen in FDT\n");
         return;
     }
 
     int len;
     const struct fdt_property *const prop = fdt_get_property(fdt, chosen, "bootargs", &len);
-    if (prop == NULL) {
+    if ((prop == NULL) || (len <= 0) || ((unsigned)len > BCM2712_FDT_BOOTARGS_MAX)) {
         kprintf("Did not find chosen bootargs in FDT\n");
         return;
     }
-    bootargs_str = ws_alloc(len);
+    /* FDT strings are untrusted length-delimited data until we terminate them. */
+    bootargs_str = ws_alloc((size_t)len + 1U);
     if (bootargs_str == NULL) {
         return;
     }
     memcpy(bootargs_str, prop->data, (size_t)len);
+    bootargs_str[len] = '\0';
     if (debug_flag > 4) {
         kprintf("fdt: bootargs %s\n", bootargs_str);
     }
+    next_arg = bootargs_str;
     for (;;) {
-        char * const arg = find_next_arg(bootargs_str, &bootargs_str, 0);
-        char *macstr;
-        if (*arg == '\0') return;
-        macstr=strstr(arg, "smsc95xx.macaddr=");
-        if (macstr != NULL) {
-            macstr=macstr+(sizeof("smsc95xx.macaddr=")-1);
-            int i;
-            for (i=0; i<6; i++) {
-                mac[i] = (uint8_t)strtoul(macstr, NULL, 16);
-                if (macstr[2] == ':') {
-                    macstr += 3;
-                }
-                else break;
-            }
-            break;
+        char * const arg = find_next_arg(next_arg, &next_arg, 1);
+        if (*arg == '\0') {
+            return;
+        }
+        if ((strncmp(arg, mac_prefix, sizeof(mac_prefix) - 1U) == 0) &&
+            parse_mac_address(arg + sizeof(mac_prefix) - 1U, mac)) {
+            return;
         }
     }
 }
@@ -102,8 +148,14 @@ static uint32_t fdt_get_board_revision(void)
 {
     const int node_offset = fdt_path_offset(fdt, "/system");
     int prop_len;
+    if (node_offset < 0) {
+        return 0;
+    }
     struct fdt_property const * const prop =  fdt_get_property(fdt, node_offset, "linux,revision", &prop_len);
-    if (prop == NULL)  return 0;
+    /* A revision is exactly one big-endian 32-bit cell. */
+    if ((prop == NULL) || (prop_len != (int)sizeof(fdt32_t))) {
+        return 0;
+    }
 
     fdt32_t const * const data = (fdt32_t const *)prop->data;
     return fdt32_to_cpu(data[0]);

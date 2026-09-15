@@ -43,6 +43,8 @@
 #include <startup.h>
 #include "libfdt.h"
 
+#define FDT_BOOTARGS_MAX_SIZE (4096U)
+
 /**
  * Go through a string and find the next space.
  * Optionally NUL-terminating the previous segment.
@@ -102,14 +104,16 @@ fdt_tweak_cmdline(struct bootargs_entry * const bap, const char * const name, pa
 		}
 		int len;
 		const struct fdt_property *const prop = fdt_get_property(fdt, chosen, "bootargs", &len);
-		if (prop == NULL) {
+		if ((prop == NULL) || (len <= 0) || ((unsigned)len > FDT_BOOTARGS_MAX_SIZE)) {
 			return;
 		}
-        next_arg = ws_alloc(len);
+        /* libfdt returns a byte count; make string parsing explicitly bounded. */
+        next_arg = ws_alloc((size_t)len + 1U);
 		if (next_arg == NULL) {
 			return;
 		}
-		memcpy(next_arg, prop->data, len);
+		memcpy(next_arg, prop->data, (size_t)len);
+        next_arg[len] = '\0';
     }
 
     for (;;) {

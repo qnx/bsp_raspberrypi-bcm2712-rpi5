@@ -69,6 +69,7 @@
 #include <sys/elf.h>
 #include <hw/sysinfo.h>
 #include <confname.h>
+#include <startup_abi.h>
 
 #if __PTR_BITS__+0 == 32
 #define PADDR_T  paddr32_t
@@ -77,6 +78,9 @@
 #endif
 
 #define PROCESSORS_MAX	64	// set this to match kernel (at least a search will find this now)
+
+/* Bound every early-startup FDT mapping before trusting its declared size. */
+#define STARTUP_FDT_MAX_SIZE	(16UL * 1024UL * 1024UL)
 
 /* this ASSERT is intentionally meant to not be conditionally implemented */
 #define _ASSERT(_c_, _extra_text_) \
@@ -415,7 +419,9 @@ void handle_common_option(int opt);
 paddr_t getsize(char *, char **);
 
 void tweak_cmdline(struct bootargs_entry *bap, const char *);
+void tweak_cmdline_with_capacity(struct bootargs_entry *bap, const char *, size_t);
 void cpu_tweak_cmdline(struct bootargs_entry *bap, const char *);
+int bootstrap_args_validate(const struct bootargs_entry *bap, size_t capacity);
 int bootstrap_arg_adjust(struct bootargs_entry *bap, const char *old, const char *new);
 int bootstrap_env_adjust(struct bootargs_entry *bap, const char *old, const char *new);
 

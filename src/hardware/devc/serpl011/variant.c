@@ -45,7 +45,8 @@ void variant_intr_init(DEV_PL011 *dev) {
 
 }
 
-void variant_intr_unmask(void) {
+void variant_intr_unmask(DEV_PL011 *dev) {
+	(void)dev;
 
 }
 

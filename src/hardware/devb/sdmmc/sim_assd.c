@@ -592,14 +592,29 @@ int sdmmc_assd_apdu_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 	struct sdio_device	*dev;
 	uint8_t				*data;
 	uint8_t				*apdu_data;
-	uint32_t			len;
+	uint32_t			wire_len;
+	size_t				capacity;
+	size_t				response_len;
 	int					status;
 
 	ext			= (SIM_SDMMC_EXT *)hba->ext;
+	if( ccb->cam_devctl_size < sizeof( SDMMC_ASSD_APDU ) ) {
+		ccb->cam_devctl_status = EINVAL;
+		return( CAM_REQ_CMP );
+	}
+
 	apdu		= ccb->cam_devctl_data;
 	apdu_data	= (uint8_t *)(apdu + 1);
 	dev			= ext->device;
-	len			= apdu->length + ASSD_APDU_STL_SIZE;	// add 2 for STL
+	capacity	= ccb->cam_devctl_size - sizeof( SDMMC_ASSD_APDU );
+
+	/* The same trailing buffer carries the request and response; validate both uses. */
+	if( ( apdu->length > capacity ) ||
+			( apdu->length > ( ASSD_APDU_MAX_DLEN - ASSD_APDU_STL_SIZE ) ) ) {
+		ccb->cam_devctl_status = EINVAL;
+		return( CAM_REQ_CMP );
+	}
+	wire_len = apdu->length + ASSD_APDU_STL_SIZE;	// add 2 for STL
 
 #ifdef SDMMC_ASSD_DEBUG
 	cam_slogf( _SLOGC_SIM_MMC, _SLOG_INFO, 1, 1, "%s:  ", __FUNCTION__ );
@@ -616,19 +631,18 @@ int sdmmc_assd_apdu_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 		return( CAM_REQ_CMP );
 	}
 
-	if( ( len + sizeof( SDMMC_ASSD_APDU ) < ccb->cam_devctl_size ) &&
-			( len < ASSD_APDU_MAX_DLEN ) && ( len > ASSD_APDU_MIN_DLEN ) ) {
+	if( ( wire_len <= ASSD_APDU_MAX_DLEN ) && ( wire_len >= ASSD_APDU_MIN_DLEN ) ) {
 		data = sdio_alloc( ASSD_APDU_MAX_DLEN );
 		if( data != NULL ) {
-			data[0] = len >> 8;
-			data[1] = len;
-			memcpy( data + ASSD_APDU_STL_SIZE, apdu_data, len - ASSD_APDU_STL_SIZE );
-			if( len < ASSD_APDU_MAX_DLEN ) {
-				memset( data + len, 0, ASSD_APDU_MAX_DLEN - len );
+			data[0] = wire_len >> 8;
+			data[1] = wire_len;
+			memcpy( data + ASSD_APDU_STL_SIZE, apdu_data, apdu->length );
+			if( wire_len < ASSD_APDU_MAX_DLEN ) {
+				memset( data + wire_len, 0, ASSD_APDU_MAX_DLEN - wire_len );
 			}
 
 #ifdef SDMMC_ASSD_DEBUG
-			sdio_dump( data, len );
+			sdio_dump( data, wire_len );
 #endif
 			status = assd_write_sec_cmd( hba, ASSD_APDU_MAX_DLEN, data, ASSD_TIME_DEFAULT );
 			if( status == EOK ) {
@@ -638,15 +652,26 @@ int sdmmc_assd_apdu_devctl( SIM_HBA * const hba, CCB_DEVCTL *ccb )
 					if( status == EOK ) {
 						status = assd_read_sec_cmd( hba, ASSD_APDU_MAX_DLEN, data, ASSD_TIME_DEFAULT );
 						if( status == EOK ) {
-							apdu->length			= 0;
-							len				= ( ( data[0] << 8 ) + data[1] );
-							if( len > ASSD_APDU_STL_SIZE ) {
-								len -= ASSD_APDU_STL_SIZE;
-								apdu->length	= min( len, ASSD_APDU_MAX_DLEN );
-								memcpy( apdu_data, data + ASSD_APDU_STL_SIZE, apdu->length );
+							wire_len = ( (uint32_t)data[0] << 8 ) | data[1];
+							if( ( wire_len < ASSD_APDU_STL_SIZE ) || ( wire_len > ASSD_APDU_MAX_DLEN ) ) {
+								/* A card-controlled length must not escape the 512-byte staging buffer. */
+								apdu->length = 0;
+								status = EIO;
+							}
+							else {
+								response_len = wire_len - ASSD_APDU_STL_SIZE;
+								apdu->length = (uint32_t)response_len;
+								if( response_len > capacity ) {
+									status = EMSGSIZE;
+								}
+								else {
+									memcpy( apdu_data, data + ASSD_APDU_STL_SIZE, response_len );
+								}
 							}
 #ifdef SDMMC_ASSD_DEBUG
-							sdio_dump( data, len + ASSD_APDU_STL_SIZE );
+							if( status == EOK ) {
+								sdio_dump( data, wire_len );
+							}
 #endif
 						}
 					}

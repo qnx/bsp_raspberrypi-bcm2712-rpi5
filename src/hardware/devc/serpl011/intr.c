@@ -352,7 +352,7 @@ static int interrupt_event_handler(message_context_t *msgctp, int code, unsigned
 		iochar_send_event(&dev->tty);
 	}
 
-	variant_intr_unmask();
+	variant_intr_unmask(dev);
 
 	InterruptUnmask(dev->intr, dev->iid);
 
